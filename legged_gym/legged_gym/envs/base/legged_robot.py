@@ -224,7 +224,7 @@ class LeggedRobot(BaseTask):
         self.last_root_vel[env_ids] = 0.
         self.last_centroidal_momentum[env_ids] = 0.
         self.last_contact_forces[env_ids] = 0.
-        self.last_feet_states[env_ids] = torch.zeros_like(self.rb_states[env_ids, self.feet_indices])
+        self.last_feet_states[env_ids] = torch.zeros_like(self.rb_states[env_ids][:, self.feet_indices])
         self.feet_air_time[env_ids] = 0.
         self.reset_buf[env_ids] = 1
 
