@@ -319,6 +319,29 @@ class IGRISC(LeggedRobot):
         ], device=self.device).unsqueeze(dim=0)
         return torch.exp(-torch.mean(torch.square(self.dof_pos[:, joint_idx_upper] - self.default_dof_pos[:, joint_idx_upper]) / joint_sigma_upper, dim=1))
        
+    def _reward_base_height(self):
+        # Penalize base height away from target
+        base_height = self._get_base_heights()
+        return torch.exp(-torch.square(base_height - self.cfg.rewards.base_height_target) / 0.1)
+    
+    def _reward_orientation(self):
+        # Penalize non flat base orientation
+        r, p, _ = get_euler_xyz(self.base_quat)
+        r, p = wrap_to_pi(r), wrap_to_pi(p)
+        return torch.exp(-(r.square()/0.5 + p.square()/0.5)/2)
+
+    def _reward_stand_still(self):
+        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
+        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
+        standstill_envs = (torch.norm(self.commands[:, :2], dim=1) < 0.1) & (torch.norm(self.rb_states[:, self.feet_indices[0], :2] - self.rb_states[:, self.feet_indices[1], :2], dim=-1) < 0.3)
+        ret = (
+            (l_contact * r_contact)*\
+        (
+            torch.exp(-(self.dof_pos - self.default_dof_pos_cfg).square().amax(dim=-1)/0.1)+\
+            torch.exp(-self.dof_vel.square().amax(dim=-1)/0.1)
+        )
+        )[standstill_envs]
+        return ret
 
 ### HELPERS ###    
 def cubic(start_pos, start_vel, end_pos, end_vel, end_time, current_time: torch.Tensor):
