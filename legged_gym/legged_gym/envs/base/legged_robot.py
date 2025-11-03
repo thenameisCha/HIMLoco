@@ -550,7 +550,7 @@ class LeggedRobot(BaseTask):
             torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
-        return torch.clip(torques, -self.torque_limits, self.torque_limits)
+        return torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
     
     def _reset_states(self, env_ids):
         self._reset_dofs(env_ids)
