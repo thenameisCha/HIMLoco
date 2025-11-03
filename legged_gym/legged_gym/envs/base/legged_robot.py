@@ -403,7 +403,7 @@ class LeggedRobot(BaseTask):
         armature = (self.default_armature*self.armature_factors[env_ids]).cpu().numpy()
         damping = (self.default_damping*self.damping_factors[env_ids]).cpu().numpy()
         for e, env_id in enumerate(env_ids):
-            dof_props = self.gym.get_actor_dof_properties(self.envs[env_ids], 0)
+            dof_props = self.gym.get_actor_dof_properties(self.envs[env_id], 0)
             dof_props['armature'] = armature[e]
             dof_props['damping'] = damping[e]
             self.gym.set_actor_dof_properties(self.envs[env_id], 0, dof_props)
