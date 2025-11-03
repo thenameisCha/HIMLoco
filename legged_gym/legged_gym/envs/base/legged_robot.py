@@ -1004,6 +1004,9 @@ class LeggedRobot(BaseTask):
         self.actor_handles = []
         self.envs = []
         
+        self.action_offset = self.cfg.env.action_offset
+        self.robot_mass = torch.zeros((self.num_envs, 1), dtype=torch.float, device=self.device, requires_grad=False)
+
         self.payload = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.com_displacement = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
         self.armature_factors = torch.ones(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
