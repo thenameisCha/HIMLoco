@@ -435,10 +435,12 @@ class LeggedRobot(BaseTask):
                 self.dof_pos_limits[:, i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_pos_limits[:, i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
             self.hard_dof_pos_limits = self.dof_pos_limits.clone()
-            self.default_armature = torch.tensor(self.cfg.asset.armature, device=self.device).unsqueeze(dim=0)
-            self.default_damping = torch.tensor(self.cfg.asset.damping, device=self.device).unsqueeze(dim=0)
-            props['armature'] = self.cfg.asset.armature
-            props['damping'] = self.cfg.asset.armature
+            self.default_armature = self.cfg.asset.armature
+            self.default_damping = self.cfg.asset.damping
+            props['armature'] = self.default_armature
+            props['damping'] = self.default_damping
+            self.default_armature = torch.tensor(self.default_armature, device=self.device).unsqueeze(dim=0)
+            self.default_damping = torch.tensor(self.default_damping, device=self.device).unsqueeze(dim=0)
         return props
     
     def _process_actuator_props(self, props, env_id):
