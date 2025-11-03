@@ -4,7 +4,7 @@ import torch
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg
-from legged_gym.utils.math import quat_apply_yaw, convert_euler_to_pi_range, wrap_to_pi
+from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi
 
 
 class IGRISC(LeggedRobot):
