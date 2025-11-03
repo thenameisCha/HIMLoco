@@ -128,6 +128,7 @@ class HIMPPO:
         mean_surrogate_loss = 0
         mean_estimation_loss = 0
         mean_swap_loss = 0
+        mean_smooth_loss = 0
         
         generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
 
