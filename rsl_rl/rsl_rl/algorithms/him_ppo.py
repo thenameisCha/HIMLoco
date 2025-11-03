@@ -226,3 +226,60 @@ class HIMPPO:
             "mean smooth loss": mean_smooth_loss
         }
         return loss_dict
+
+    def _calc_grad_penalty(self, obs_batch, actions_log_prob_batch = None):
+        # Compute gradients separately for obs_batch and history_batch
+        grad_log_prob_obs = torch.autograd.grad(
+            actions_log_prob_batch.sum(),
+            obs_batch,
+            create_graph=True,
+        )[0]
+
+        # Ensure gradients are not None
+        assert grad_log_prob_obs is not None, "Gradient for obs_batch is None."
+
+        # Calculate the gradient penalty loss
+        gradient_penalty_loss = torch.sum(torch.square(grad_log_prob_obs), dim=-1).mean()            
+
+        return gradient_penalty_loss
+    
+    def mirror_actions(self, actions: torch.Tensor):
+        target_mirrored_action_mean = actions.detach().clone()
+        with torch.no_grad():
+            num_waist = self.symmetry_cfg['num_waist']
+            num_legs = self.symmetry_cfg['num_legs']
+            num_arms = self.symmetry_cfg['num_arms']
+
+            start = 0
+            num_section = num_waist
+            end = start + num_section
+            if num_waist:
+                target_mirrored_action_mean[..., :end-1] *= -1
+            # Lower body
+            start = end
+            num_section = num_legs
+            end = start + num_section
+            target_mirrored_action_mean[..., start:start+num_section//2] = actions[..., start+num_section//2:end]
+            target_mirrored_action_mean[..., start+num_section//2:end] = actions[..., start:start+num_section//2]
+            target_mirrored_action_mean[..., start+1:start+1+2] *= -1
+            target_mirrored_action_mean[..., start+num_section//2-1] *= -1
+            target_mirrored_action_mean[..., start+num_section//2+1:start+num_section//2+1+2] *= -1
+            target_mirrored_action_mean[..., end-1] *= -1
+            # Upper body
+            if num_arms > 0:
+                start = end
+                num_section = num_arms
+                end = start + num_section
+                if num_arms:
+                    target_mirrored_action_mean[..., start:start+num_section//2] = actions[..., start+num_section//2:end]
+                    target_mirrored_action_mean[..., start+num_section//2:end] = actions[..., start:start+num_section//2]
+                    target_mirrored_action_mean[..., start+1] *= -1
+                    target_mirrored_action_mean[..., start+num_section//2+1] *= -1
+                    if num_arms == 8: # shoulder yaw in action space
+                        target_mirrored_action_mean[..., start+2] *= -1
+                        target_mirrored_action_mean[..., start+num_section//2+2] *= -1
+
+            assert end == actions.shape[-1], f'change params in mirror actions! action dim : {actions.shape[-1]}, mirror index end : {end}'
+
+        return target_mirrored_action_mean
+    
