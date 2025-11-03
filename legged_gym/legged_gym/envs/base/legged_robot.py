@@ -244,8 +244,10 @@ class LeggedRobot(BaseTask):
             self.Kd_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.domain_rand.randomize_motor_strength:
             self.motor_strength_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (len(env_ids), 1), device=self.device)
-        self.refresh_actor_rigid_shape_props(env_ids)
-        self.refresh_actor_dof_props(env_ids)
+
+        if (self.common_step_counter % self.cfg.domain_rand.props_interval == 0):
+            self.refresh_actor_dof_props(env_ids)
+            self.refresh_actor_rigid_shape_props(env_ids)
         
         # fill extras
         self.extras["episode"] = {}

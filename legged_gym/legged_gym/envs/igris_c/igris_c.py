@@ -5,6 +5,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi
+from isaacgym.torch_utils import *
 
 
 class IGRISC(LeggedRobot):
@@ -334,10 +335,11 @@ class IGRISC(LeggedRobot):
         l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
         r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
         standstill_envs = (torch.norm(self.commands[:, :2], dim=1) < 0.1) & (torch.norm(self.rb_states[:, self.feet_indices[0], :2] - self.rb_states[:, self.feet_indices[1], :2], dim=-1) < 0.3)
-        ret = (
+        ret = torch.zeros((self.num_envs,), device=self.device)
+        ret[standstill_envs] = (
             (l_contact * r_contact)*\
         (
-            torch.exp(-(self.dof_pos - self.default_dof_pos_cfg).square().amax(dim=-1)/0.1)+\
+            torch.exp(-(self.dof_pos - self.default_dof_pos).square().amax(dim=-1)/0.1)+\
             torch.exp(-self.dof_vel.square().amax(dim=-1)/0.1)
         )
         )[standstill_envs]

@@ -139,17 +139,6 @@ class LeggedRobotCfg(BaseConfig):
         randomize_link_mass = True
         link_mass_range = [0.9, 1.1]
         
-        randomize_friction = True
-        friction_range = [0.2, 1.25]
-        
-        randomize_restitution = True
-        restitution_range = [0., 1.0]
-        
-        randomize_damping = True
-        damping_range = [0.6, 1.4]
-        randomize_armature = True
-        armature_range = [0.8, 1.2]
-
         randomize_motor_strength = True
         motor_strength_range = [0.9, 1.1]
         
@@ -172,6 +161,17 @@ class LeggedRobotCfg(BaseConfig):
 
         delay = True
         minimum_delay = 0.005 # CAN runs in 200Hz
+
+        # Randomizing these properties for each env reset leads to too slow training
+        randomize_friction = True
+        friction_range = [0.2, 1.25]
+        randomize_restitution = True
+        restitution_range = [0., 1.0]
+        randomize_damping = True
+        damping_range = [0.6, 1.4]
+        randomize_armature = True
+        armature_range = [0.8, 1.2]
+        props_interval = 1000 # ticks
 
     class rewards:
         class scales:
