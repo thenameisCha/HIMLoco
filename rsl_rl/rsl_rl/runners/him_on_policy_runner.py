@@ -39,6 +39,7 @@ import torch
 from rsl_rl.algorithms import PPO, HIMPPO
 from rsl_rl.modules import HIMActorCritic
 from rsl_rl.env import VecEnv
+import wandb
 
 
 class HIMOnPolicyRunner:
@@ -80,9 +81,18 @@ class HIMOnPolicyRunner:
         self.tot_timesteps = 0
         self.tot_time = 0
         self.current_learning_iteration = 0
+        self.LOG_WANDB = self.cfg['LOG_WANDB']
+        self.init_wandb(train_cfg)
 
         _, _ = self.env.reset()
     
+
+    def init_wandb(self, train_cfg):
+        # WANDB INIT
+        if self.LOG_WANDB:
+            wandb.init(project=train_cfg['runner']['wandb_name'])
+
+
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
         if self.log_dir is not None and self.writer is None:
@@ -146,6 +156,8 @@ class HIMOnPolicyRunner:
                 self.log(locals())
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+            if it%10 == 0:
+                self.log_wandb(locals())
             ep_infos.clear()
         
         self.current_learning_iteration += num_learning_iterations
@@ -249,3 +261,36 @@ class HIMOnPolicyRunner:
         if device is not None:
             self.alg.actor_critic.to(device)
         return self.alg.actor_critic.act_inference
+
+    def log_wandb(self, locs):
+        if self.LOG_WANDB:
+            wandb_dict = dict()
+            wandb_dict['n_updates'] = locs['it']
+            for key, val in locs['loss_dict'].items():
+                wandb_dict['Loss/'+key] = val
+            wandb_dict['Loss/learning_rate'] = self.alg.learning_rate
+            wandb_dict['perturbation_flag'] = 1. if self.env.start_perturb and self.env.cfg.domain_rand.push_robots else 0
+            wandb_dict["Policy/mean_noise_std"] = self.alg.actor_critic.std.mean()
+            if locs['ep_infos']:
+                for key in locs['ep_infos'][0]:
+                    infotensor = torch.tensor([], device=self.device)
+                    for ep_info in locs['ep_infos']:
+                        # handle scalar and zero dimensional tensor infos
+                        if not isinstance(ep_info[key], torch.Tensor):
+                            ep_info[key] = torch.Tensor([ep_info[key]])
+                        if len(ep_info[key].shape) == 0:
+                            ep_info[key] = ep_info[key].unsqueeze(0)
+                        infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
+                    value = torch.mean(infotensor)
+                    wandb_dict['Train/Mean_episode_' + key] = value.item()
+            if len(locs['rewbuffer']) > 0:
+                wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
+                wandb_dict['Train/mean_episode_length_t'] = statistics.mean(locs['lenbuffer']) * self.env.dt
+                wandb.log(wandb_dict)
+
+    def save_wandb(self, model_path):
+        if self.LOG_WANDB:
+            artifact = wandb.Artifact('model', type='model')
+            artifact.add_file(model_path)
+            wandb.run.log_artifact(artifact)
+            wandb.run.finish()
