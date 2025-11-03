@@ -3,11 +3,11 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class IGRISCCfg( LeggedRobotCfg ):
     class env(LeggedRobotCfg.env):
-        num_one_step_observations = 77
+        num_one_step_observations = 51
         num_observations = num_one_step_observations * 6
-        num_one_step_privileged_obs = 77 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
+        num_one_step_privileged_obs = 51 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
-        num_actions = 22
+        num_actions = 14
         num_waist = 2 # How many waist joints are in the action
         num_lower_actions = 12
         action_offset = 0 # Where does the action start in the joint list
@@ -35,18 +35,18 @@ class IGRISCCfg( LeggedRobotCfg ):
             # "Joint_Neck_Yaw": 0.0,
             # "Joint_Neck_Pitch": 0.0,
             # # Left arm (7)
-            "Joint_Shoulder_Pitch_Left": 0.13,
-            "Joint_Shoulder_Roll_Left": 0.13,
-            "Joint_Shoulder_Yaw_Left": 0.,
-            "Joint_Elbow_Pitch_Left": -0.3,
+            # "Joint_Shoulder_Pitch_Left": 0.13,
+            # "Joint_Shoulder_Roll_Left": 0.13,
+            # "Joint_Shoulder_Yaw_Left": 0.,
+            # "Joint_Elbow_Pitch_Left": -0.3,
             # "Joint_Wrist_Yaw_Left": 0.0,
             # "Joint_Wrist_Roll_Left": 0.0,
             # "Joint_Wrist_Pitch_Left": 0.0,
             # # Right arm (7)
-            "Joint_Shoulder_Pitch_Right": 0.13,
-            "Joint_Shoulder_Roll_Right": -0.13,
-            "Joint_Shoulder_Yaw_Right": -0.,
-            "Joint_Elbow_Pitch_Right": -0.3,
+            # "Joint_Shoulder_Pitch_Right": 0.13,
+            # "Joint_Shoulder_Roll_Right": -0.13,
+            # "Joint_Shoulder_Yaw_Right": -0.,
+            # "Joint_Elbow_Pitch_Right": -0.3,
             # "Joint_Wrist_Yaw_Right": 0.0,
             # "Joint_Wrist_Roll_Right": 0.0,
             # "Joint_Wrist_Pitch_Right": 0.0,
@@ -76,18 +76,18 @@ class IGRISCCfg( LeggedRobotCfg ):
             # "Joint_Neck_Yaw": 30.0,
             # "Joint_Neck_Pitch": 30.0,
             # # Left arm (7)
-            "Joint_Shoulder_Pitch_Left": 50.0,
-            "Joint_Shoulder_Roll_Left": 50.,
-            "Joint_Shoulder_Yaw_Left": 30.0,
-            "Joint_Elbow_Pitch_Left": 25.0,
+            # "Joint_Shoulder_Pitch_Left": 50.0,
+            # "Joint_Shoulder_Roll_Left": 50.,
+            # "Joint_Shoulder_Yaw_Left": 30.0,
+            # "Joint_Elbow_Pitch_Left": 25.0,
             # "Joint_Wrist_Yaw_Left": 10,
             # "Joint_Wrist_Roll_Left": 10,
             # "Joint_Wrist_Pitch_Left": 10,
             # # Right arm (7)
-            "Joint_Shoulder_Pitch_Right": 50.0,
-            "Joint_Shoulder_Roll_Right": 50.,
-            "Joint_Shoulder_Yaw_Right": 30.0,
-            "Joint_Elbow_Pitch_Right": 25.0,
+            # "Joint_Shoulder_Pitch_Right": 50.0,
+            # "Joint_Shoulder_Roll_Right": 50.,
+            # "Joint_Shoulder_Yaw_Right": 30.0,
+            # "Joint_Elbow_Pitch_Right": 25.0,
             # "Joint_Wrist_Yaw_Right": 10.0,
             # "Joint_Wrist_Roll_Right": 10.0,
             # "Joint_Wrist_Pitch_Right": 10.0,
@@ -114,18 +114,18 @@ class IGRISCCfg( LeggedRobotCfg ):
             # "Joint_Neck_Yaw": 1.0,
             # "Joint_Neck_Pitch": 1.0,
             # # Left arm (7)
-            "Joint_Shoulder_Pitch_Left": 2.,
-            "Joint_Shoulder_Roll_Left": 2.,
-            "Joint_Shoulder_Yaw_Left": 1.5,
-            "Joint_Elbow_Pitch_Left": 1.3,
+            # "Joint_Shoulder_Pitch_Left": 2.,
+            # "Joint_Shoulder_Roll_Left": 2.,
+            # "Joint_Shoulder_Yaw_Left": 1.5,
+            # "Joint_Elbow_Pitch_Left": 1.3,
             # "Joint_Wrist_Yaw_Left": .5,
             # "Joint_Wrist_Roll_Left": .5,
             # "Joint_Wrist_Pitch_Left": .5,
             # # Right arm (7)
-            "Joint_Shoulder_Pitch_Right": 2.,
-            "Joint_Shoulder_Roll_Right": 2.,
-            "Joint_Shoulder_Yaw_Right": 1.5,
-            "Joint_Elbow_Pitch_Right": 1.3,
+            # "Joint_Shoulder_Pitch_Right": 2.,
+            # "Joint_Shoulder_Roll_Right": 2.,
+            # "Joint_Shoulder_Yaw_Right": 1.5,
+            # "Joint_Elbow_Pitch_Right": 1.3,
             # "Joint_Wrist_Yaw_Right": .5,
             # "Joint_Wrist_Roll_Right": .5,
             # "Joint_Wrist_Pitch_Right": .5,
@@ -138,8 +138,8 @@ class IGRISCCfg( LeggedRobotCfg ):
             3., 3.,
             3., 3., 5., 5., 10., 10.,
             3., 3., 5., 5., 10., 10.,
-            1., 1., 1., 2.,
-            1., 1., 1., 2.,
+            # 1., 1., 1., 2.,
+            # 1., 1., 1., 2.,
         ]
     
     class asset(LeggedRobotCfg.asset):
@@ -153,15 +153,15 @@ class IGRISCCfg( LeggedRobotCfg ):
                     0.0614,  # 0.0307
                     0.0521, 0.0786, 0.0307, 0.0521, 0.0598, 0.0598,  # 0.0299
                     0.0521, 0.0786, 0.0307, 0.0521, 0.0598, 0.0598,  # 0.0299
-                    0.0307, 
-                    0.0307, 
-                    0.0307, 
-                    0.0307,  # Left arm (shoulder+elbow)
+                    # 0.0307, 
+                    # 0.0307, 
+                    # 0.0307, 
+                    # 0.0307,  # Left arm (shoulder+elbow)
                     # 0.01433, 0.01433, 0.01433,  # Left wrist
-                    0.0307, 
-                    0.0307, 
-                    0.0307, 
-                    0.0307,  # Right arm (shoulder+elbow)
+                    # 0.0307, 
+                    # 0.0307, 
+                    # 0.0307, 
+                    # 0.0307,  # Right arm (shoulder+elbow)
                     # 0.01433, 0.01433, 0.01433,  # Right wrist
                     # 0.2488, 0.2488  # Neck joints
             ]
@@ -172,15 +172,15 @@ class IGRISCCfg( LeggedRobotCfg ):
                 1.e-6,
                 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6,
                 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6,
-                1.e-6, 
-                1.e-6, 
-                1.e-6, 
-                1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
                 # 0.1, 0.1, 0.1
-                1.e-6, 
-                1.e-6, 
-                1.e-6, 
-                1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
+                # 1.e-6, 
                 # 0.1, 0.1, 0.1
             ] # 0.1
         
@@ -203,18 +203,18 @@ class IGRISCCfg( LeggedRobotCfg ):
             1.81,
             1.81,
 
-            0.54,
-            0.54,
-            0.54,
-            0.54,
+            # 0.54,
+            # 0.54,
+            # 0.54,
+            # 0.54,
             # 0.264,
             # 0.264,
             # 0.264,
 
-            0.54,
-            0.54,
-            0.54,
-            0.54,
+            # 0.54,
+            # 0.54,
+            # 0.54,
+            # 0.54,
             # 0.264,
             # 0.264,
             # 0.264,
@@ -266,7 +266,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
         # LCP loss
         LCP_cfg = {
-            'use_LCP': False,
+            'use_LCP': True,
             'smooth_coef': 1.e-3,
             'mask': [
             ]

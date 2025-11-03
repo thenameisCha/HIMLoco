@@ -52,6 +52,8 @@ class HIMPPO:
                  schedule="fixed",
                  desired_kl=0.01,
                  device='cpu',
+                 LCP_cfg: dict = {'use_LCP': False},
+                 symmetry_cfg: dict = {'enforce_symmetry': False,},
                  ):
 
         self.device = device
@@ -59,6 +61,11 @@ class HIMPPO:
         self.desired_kl = desired_kl
         self.schedule = schedule
         self.learning_rate = learning_rate
+        self.use_LCP = LCP_cfg['use_LCP']
+        self.smooth_coef = LCP_cfg['smooth_coef']
+        self.LCP_cfg = LCP_cfg
+        self.enforce_symmetry = symmetry_cfg['enforce_symmetry']
+        self.symmetry_cfg = symmetry_cfg
 
         # PPO components
         self.actor_critic = actor_critic
@@ -127,6 +134,27 @@ class HIMPPO:
         for obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
             old_mu_batch, old_sigma_batch in generator:
                 
+                if self.use_LCP:
+                    mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
+                    lcp_obs_batch = obs_batch.clone() # for LCP loss
+                    lcp_obs_batch.requires_grad_()
+                    mask = torch.zeros_like(lcp_obs_batch)
+                    mask[..., mask_idx] = 1
+                    eff_lcp_obs_batch = lcp_obs_batch*(1-mask) + lcp_obs_batch.detach()*mask
+                    # lcp_hidden_batch.requires_grad_()
+                    self.actor_critic.act(eff_lcp_obs_batch)
+                    actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                    gradient_penalty_loss = self._calc_grad_penalty(obs_batch=lcp_obs_batch, actions_log_prob_batch=actions_log_prob_batch)
+                    mean_smooth_loss += gradient_penalty_loss.item()
+                else:
+                    gradient_penalty_loss = 0.
+                    # GRAD PEN FOR SMOOTH MOTION from "Learning Smooth Humanoid Locomotion through Lipschitz-Constrained Policies"
+                    # gradient_penalty_loss = self._calc_grad_penalty_2(
+                    #     obs_batch    = lcp_obs_batch,
+                    #     hidden_batch = lcp_hidden_batch,
+                    #     log_prob     = actions_log_prob_batch
+                    # )
+
                 self.actor_critic.act(obs_batch)
                 actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
                 value_batch = self.actor_critic.evaluate(critic_obs_batch)
@@ -169,7 +197,8 @@ class HIMPPO:
                 else:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() +\
+                self.smooth_coef * gradient_penalty_loss
 
                 # Gradient step
                 self.optimizer.zero_grad()
@@ -187,6 +216,13 @@ class HIMPPO:
         mean_surrogate_loss /= num_updates
         mean_estimation_loss /= num_updates
         mean_swap_loss /= num_updates
+        mean_smooth_loss /= num_updates
         self.storage.clear()
-
-        return mean_value_loss, mean_surrogate_loss, estimation_loss, swap_loss
+        loss_dict = {
+            "value_function": mean_value_loss,
+            "surrogate": mean_surrogate_loss,
+            "estimation loss": estimation_loss,
+            "swap loss": swap_loss,
+            "mean smooth loss": mean_smooth_loss
+        }
+        return loss_dict
