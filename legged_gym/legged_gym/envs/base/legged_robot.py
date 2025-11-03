@@ -973,6 +973,8 @@ class LeggedRobot(BaseTask):
         self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset)
         dof_props_asset = self.gym.get_asset_dof_properties(robot_asset)
         rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(robot_asset)
+        if self.cfg.asset.asset_is_mjcf:
+            actuator_props = self.gym.get_asset_actuator_properties(robot_asset) 
 
         # save body names from the asset
         body_names = self.gym.get_asset_rigid_body_names(robot_asset)
