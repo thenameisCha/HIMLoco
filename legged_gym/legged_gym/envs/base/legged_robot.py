@@ -435,12 +435,10 @@ class LeggedRobot(BaseTask):
                 self.dof_pos_limits[:, i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_pos_limits[:, i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
             self.hard_dof_pos_limits = self.dof_pos_limits.clone()
-            self.default_armature = self.cfg.asset.armature
-            self.default_damping = self.cfg.asset.damping
-            props['armature'] = self.default_armature
-            props['damping'] = self.default_damping
-            self.default_armature = torch.tensor(self.default_armature, device=self.device).unsqueeze(dim=0)
-            self.default_damping = torch.tensor(self.default_damping, device=self.device).unsqueeze(dim=0)
+            self.default_armature = torch.tensor(self.cfg.asset.armature, device=self.device).unsqueeze(dim=0)
+            self.default_damping = torch.tensor(self.cfg.asset.damping, device=self.device).unsqueeze(dim=0)
+            props['armature'] = self.cfg.asset.armature
+            props['damping'] = self.cfg.asset.armature
         return props
     
     def _process_actuator_props(self, props, env_id):
@@ -967,7 +965,6 @@ class LeggedRobot(BaseTask):
         asset_options.linear_damping = self.cfg.asset.linear_damping
         asset_options.max_angular_velocity = self.cfg.asset.max_angular_velocity
         asset_options.max_linear_velocity = self.cfg.asset.max_linear_velocity
-        asset_options.armature = self.cfg.asset.armature
         asset_options.thickness = self.cfg.asset.thickness
         asset_options.disable_gravity = self.cfg.asset.disable_gravity
 
