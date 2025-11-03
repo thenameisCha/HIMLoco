@@ -145,6 +145,11 @@ class LeggedRobotCfg(BaseConfig):
         randomize_restitution = True
         restitution_range = [0., 1.0]
         
+        randomize_damping = True
+        damping_range = [0.6, 1.4]
+        randomize_armature = True
+        armature_range = [0.8, 1.2]
+
         randomize_motor_strength = True
         motor_strength_range = [0.9, 1.1]
         
