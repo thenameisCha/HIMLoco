@@ -1447,7 +1447,6 @@ class LeggedRobot(BaseTask):
     def _reward_slow_touchdown(self): # https://arxiv.org/pdf/2509.06342
         ret = (((torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=-1) > 1.)&(torch.norm(self.last_contact_forces[:, self.feet_indices, :3], dim=-1) < 1.))*\
             torch.amax(torch.cat((torch.norm(self.rb_states[:, self.feet_indices, 7:10], dim=-1, keepdim=True), torch.norm(self.last_feet_states[..., 7:10], dim=-1, keepdim=True)), dim=-1), dim=-1)).sum(dim=-1)
-        ret[self.standstill_flag] = 0
         return ret
     
     def _reward_contact_power(self):
