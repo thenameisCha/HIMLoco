@@ -113,7 +113,7 @@ class LeggedRobot(BaseTask):
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
-        termination_ids, termination_privileged_obs, extras = self.post_physics_step()
+        termination_ids, extras = self.post_physics_step()
 
         # return clipped obs, clipped states (None), rewards, dones and infos
         clip_obs = self.cfg.normalization.clip_observations
@@ -122,7 +122,7 @@ class LeggedRobot(BaseTask):
         if self.privileged_obs_buf is not None:
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
             self.mirror_privileged_obs_buf = torch.clip(self.mirror_privileged_obs_buf, -clip_obs, clip_obs)
-        return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras, termination_ids, termination_privileged_obs, extras
+        return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras, termination_ids, extras
 
     def get_mirror_observations(self):
         return self.mirror_obs_buf, self.mirror_privileged_obs_buf
@@ -179,10 +179,11 @@ class LeggedRobot(BaseTask):
             self._draw_debug_vis()
 
         extras = {
+            'termination_privileged_obs': termination_privileged_obs,
             'mirror_termination_privileged_obs': mirror_termination_privileged_obs
         }
 
-        return env_ids, termination_privileged_obs, extras
+        return env_ids, extras
 
     def check_termination(self):
         """ Check if environments need to be reset
