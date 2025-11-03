@@ -3,11 +3,11 @@ from legged_gym import LEGGED_GYM_ROOT_DIR, envs
 import torch
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.legged_robot import LeggedRobot
-from legged_gym.envs.igris_c.igris_c_config import IGRISCAMPCfg
+from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg
 from legged_gym.utils.math import quat_apply_yaw, convert_euler_to_pi_range, wrap_to_pi
 
 
-class IGRISCAMP(LeggedRobot):
+class IGRISC(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
 
