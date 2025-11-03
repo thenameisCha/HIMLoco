@@ -21,8 +21,8 @@ fi
 # ---- 3) Create ~/.bash_aliases with requested alias ----
 # (exact string you provided)
 mkdir -p "$HOME"
-echo "alias iv='conda activate isaac_env && cd workspace/HIMLOCO'" > "$HOME/.bash_aliases"
-echo "alias train='conda activate isaac_env && cd workspace/HIMLOCO/legged_gym/legged_gym/scripts && python train.py'" >> "$HOME/.bash_aliases"
+echo "alias iv='conda activate isaac_env && cd workspace/HIMLoco'" > "$HOME/.bash_aliases"
+echo "alias train='conda activate isaac_env && cd workspace/HIMLoco/legged_gym/legged_gym/scripts && python train.py'" >> "$HOME/.bash_aliases"
 conda activate isaac_env
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
 
@@ -31,11 +31,11 @@ pip3 install torch==1.10.0+cu113 torchvision==0.11.1+cu113 tensorboard==2.8.0 py
 
 # ---- 5) Install Isaac Gym Python package in editable mode ----
 # expects a folder named 'isaacgym' in the current working directory
-# mv workspace/HIMLOCO/IsaacGym_Preview_4_Package.tar.gz workspace/ 
+# mv workspace/HIMLoco/IsaacGym_Preview_4_Package.tar.gz workspace/ 
 cd /workspace && tar -xzf /workspace/IsaacGym_Preview_4_Package.tar.gz
 cd /workspace/isaacgym/python && pip install -e .
-cd /workspace/HIMLOCO/rsl_rl && pip install -e .
-cd /workspace/HIMLOCO/legged_gym && pip install -e .
+cd /workspace/HIMLoco/rsl_rl && pip install -e .
+cd /workspace/HIMLoco/legged_gym && pip install -e .
 
 # ---- 6) Install wandb ----
 pip install wandb
