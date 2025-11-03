@@ -100,7 +100,7 @@ class LeggedRobot(BaseTask):
 
         self.pre_physics_step()
         self.delayed_actions = self.actions.clone().view(self.num_envs, 1, self.num_actions).repeat(1, self.cfg.control.decimation, 1)
-        delay_steps = torch.randint(self.cfg.domain_rand.minimum_delay/self.cfg.sim.dt, self.cfg.control.decimation, (self.num_envs, 1), device=self.device)
+        delay_steps = torch.randint(int(self.cfg.domain_rand.minimum_delay/self.cfg.sim.dt), self.cfg.control.decimation, (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.delay:
             for i in range(self.cfg.control.decimation):
                 self.delayed_actions[:, i] = self.last_actions + (self.actions - self.last_actions) * (i >= delay_steps)
