@@ -33,11 +33,11 @@ from .base_config import BaseConfig
 class LeggedRobotCfg(BaseConfig):
     class env:
         num_envs = 4096
-        num_one_step_observations = 45
+        num_one_step_observations = 77
         num_observations = num_one_step_observations * 6
-        num_one_step_privileged_obs = 45 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
+        num_one_step_privileged_obs = 77 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
-        num_actions = 12
+        num_actions = 22
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True # send time out information to the algorithm
         episode_length_s = 20 # episode length in seconds
@@ -69,14 +69,14 @@ class LeggedRobotCfg(BaseConfig):
 
     class commands:
         curriculum = True
-        max_curriculum = 3.0
+        max_curriculum = 1.5
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            lin_vel_y = [-1.0, 1.0]   # min max [m/s]
-            ang_vel_yaw = [-3.14, 3.14]    # min max [rad/s]
+            lin_vel_x = [-0.0, 1.0] # min max [m/s]
+            lin_vel_y = [-0.0, 0.0]   # min max [m/s]
+            ang_vel_yaw = [-1., 1.]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
     class init_state:
@@ -84,25 +84,28 @@ class LeggedRobotCfg(BaseConfig):
         rot = [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
         lin_vel = [0.0, 0.0, 0.0]  # x,y,z [m/s]
         ang_vel = [0.0, 0.0, 0.0]  # x,y,z [rad/s]
-        default_joint_angles = { # target angles when action = 0.0
-            "joint_a": 0., 
-            "joint_b": 0.}
+        default_joint_angles = {
+        }
 
     class control:
         control_type = 'P' # P: position, V: velocity, T: torques
         # PD Drive parameters:
-        stiffness = {'joint_a': 10.0, 'joint_b': 15.}  # [N*m/rad]
-        damping = {'joint_a': 1.0, 'joint_b': 1.5}     # [N*m*s/rad]
+        stiffness = {
+        }
+        damping = {
+        }
+
+
         # action scale: target angle = actionScale * action + defaultAngle
-        action_scale = 0.5
+        action_scale = [
+        ]
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
-        hip_reduction = 1.0
 
     class asset:
-        file = ""
-        name = "legged_robot"  # actor name
-        foot_name = "None" # name of the feet bodies, used to index body state and contact force tensors
+        file = '' 
+        name = ""  # actor name
+        foot_name = "" # name of the feet bodies, used to index body state and contact force tensors
         penalize_contacts_on = []
         terminate_after_contacts_on = []
         disable_gravity = False
@@ -118,8 +121,13 @@ class LeggedRobotCfg(BaseConfig):
         linear_damping = 0.
         max_angular_velocity = 1000.
         max_linear_velocity = 1000.
-        armature = 0.
         thickness = 0.01
+
+        armature = []
+        
+        damping = []
+
+        frictionloss = []
 
     class domain_rand:
         randomize_payload_mass = True
@@ -128,13 +136,13 @@ class LeggedRobotCfg(BaseConfig):
         randomize_com_displacement = True
         com_displacement_range = [-0.05, 0.05]
 
-        randomize_link_mass = False
+        randomize_link_mass = True
         link_mass_range = [0.9, 1.1]
         
         randomize_friction = True
         friction_range = [0.2, 1.25]
         
-        randomize_restitution = False
+        randomize_restitution = True
         restitution_range = [0., 1.0]
         
         randomize_motor_strength = True
@@ -147,7 +155,7 @@ class LeggedRobotCfg(BaseConfig):
         kd_range = [0.9, 1.1]
         
         randomize_initial_joint_pos = True
-        initial_joint_pos_range = [0.5, 1.5]
+        initial_joint_pos_range = [0.8, 1.2]
         
         disturbance = True
         disturbance_range = [-30.0, 30.0]
@@ -155,9 +163,10 @@ class LeggedRobotCfg(BaseConfig):
         
         push_robots = True
         push_interval_s = 16
-        max_push_vel_xy = 1.
+        max_push_vel_xy = .5
 
         delay = True
+        minimum_delay = 0.005 # CAN runs in 200Hz
 
     class rewards:
         class scales:
@@ -178,7 +187,7 @@ class LeggedRobotCfg(BaseConfig):
             stand_still = -0.
 
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.2 # tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1. # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
@@ -200,7 +209,7 @@ class LeggedRobotCfg(BaseConfig):
         add_noise = True
         noise_level = 1.0 # scales other values
         class noise_scales:
-            dof_pos = 0.01
+            dof_pos = 0.1
             dof_vel = 1.5
             lin_vel = 0.1
             ang_vel = 0.2
@@ -259,6 +268,16 @@ class LeggedRobotCfgPPO(BaseConfig):
         lam = 0.95
         desired_kl = 0.01
         max_grad_norm = 1.
+        
+        # LCP loss
+        LCP_cfg = {
+            'use_LCP': False,
+        }
+
+        # symmetry loss
+        symmetry_cfg = {
+            'enforce_symmetry' : False,
+        }
 
     class runner:
         policy_class_name = 'HIMActorCritic'
@@ -275,3 +294,10 @@ class LeggedRobotCfgPPO(BaseConfig):
         load_run = -1 # -1 = last run
         checkpoint = -1 # -1 = last saved model
         resume_path = None # updated from load_run and chkpt
+
+        LOG_WANDB = True
+        env_name = ''
+        file_name = ''
+        config_name = ''
+        wandb_name = ''
+        wandb_log_interval = 10
