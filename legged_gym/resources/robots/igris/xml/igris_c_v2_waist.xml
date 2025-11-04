@@ -115,7 +115,7 @@
     <light directional="true" diffuse=".8 .8 .8" pos="0 0 10" dir="0.5 0.5 -5" />
     <light directional="true" diffuse=".3 .3 .3" pos="10 0 0" dir="-10 0 0" />
 
-    <body name="base_link" pos="0.0 0.0 0.97" quat="1 0 0 0" childclass="robot">
+    <body name="base_link" pos="0.0 0.0 1." quat="1 0 0 0" childclass="robot">
       <site name="base_link_imu_site" pos="0.050 0 0.047" quat="0.7071068 0.0 0.7071068 0.0" size="0.01"/>
       <joint armature="0" damping="0" frictionloss="0" limited="false" name="virtual_joint" stiffness="0" type="free" />
       <!-- <inertial pos="0.00175 0.00112 0.15154" mass="12.974" fullinertia="0.15110 0.12880 0.08070 -0.00136 0.00843 -0.00089"/> -->

@@ -254,15 +254,10 @@ class IGRISCCfg( LeggedRobotCfg ):
             base_height = -10.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3
-            feet_air_time = 0.0
-            collision = 0.0
             action_rate = -0.01
-            dof_pos_limits = -5.0
-            alive = 0.15
-            hip_pos = -1.0
-            contact_no_vel = -0.2
-            feet_swing_height = -20.0
-            contact = 0.18
+            swing_push = 2.0
+            swing_ori = 1.0
+            feet_sliding = -1.e-2
             
 
     class commands(LeggedRobotCfg.commands):
@@ -301,7 +296,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = 'HIMActorCritic'
 
         min_normalized_std = .1
-        LOG_WANDB = True
+        LOG_WANDB = False
         env_name = 'igris_c'
         file_name = 'igris_c'
         config_name = 'igris_c'

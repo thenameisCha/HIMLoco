@@ -46,7 +46,7 @@ class AMPLeggedRobotCfg(LeggedRobotCfg):
         amp_num_preload_transitions = 2000000
 
 class AMPLeggedRobotCfgPPO(LeggedRobotCfgPPO):
-    runner_class_name = 'HIMAMPOnPolicyRunner'
+    runner_class_name = 'HIMOnPolicyRunner_AMP'
         
     class algorithm(LeggedRobotCfgPPO.algorithm):
         amp_replay_buffer_size = 100000
@@ -54,7 +54,7 @@ class AMPLeggedRobotCfgPPO(LeggedRobotCfgPPO):
         disc_grad_pen = 1.
 
     class runner(LeggedRobotCfgPPO.runner):
-        algorithm_class_name = 'HIMAMPPPO'
+        algorithm_class_name = 'HIMPPO_AMP'
         amp_reward_coef = 3.0 * (AMPLeggedRobotCfg.sim.dt * AMPLeggedRobotCfg.control.decimation)
         amp_motion_files = AMPLeggedRobotCfg.env.amp_motion_files
         amp_num_preload_transitions = AMPLeggedRobotCfg.env.amp_num_preload_transitions

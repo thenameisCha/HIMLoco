@@ -47,6 +47,7 @@ from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
+import time
 
 class LeggedRobot(BaseTask):
     def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
@@ -152,7 +153,6 @@ class LeggedRobot(BaseTask):
         
         self.feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         self.feet_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:10]
-
         self._post_physics_step_callback()
 
         # compute observations, rewards, resets, ...
@@ -191,11 +191,11 @@ class LeggedRobot(BaseTask):
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
-        # dof_reset_buf = torch.any(
-        #     (self.dof_pos < self.dof_pos_limits[..., 0]) \
-        #         | (self.dof_pos > self.dof_pos_limits[..., 1])
-        #         , dim=-1)
-        # self.reset_buf |= dof_reset_buf
+        dof_reset_buf = torch.any(
+            (self.dof_pos < self.dof_pos_limits[..., 0]) \
+                | (self.dof_pos > self.dof_pos_limits[..., 1])
+                , dim=-1)
+        self.reset_buf |= dof_reset_buf
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -527,6 +527,7 @@ class LeggedRobot(BaseTask):
 
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        self.commands[env_ids, 2] *= (self.commands[env_ids, 2] > 0.2)
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
@@ -703,6 +704,7 @@ class LeggedRobot(BaseTask):
         self.base_quat = self.root_states[:, 3:7]
         self.feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         self.feet_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:10]
+        self.feet_num = len(self.feet_indices)
 
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
         self.centroidal_momentum = gymtorch.torch.zeros((self.num_envs, 6), device=self.device)       

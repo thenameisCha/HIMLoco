@@ -1,52 +1,13 @@
-# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: BSD-3-Clause
-# 
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its
-# contributors may be used to endorse or promote products derived from
-# this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# Copyright (c) 2021 ETH Zurich, Nikita Rudin
-
 from legged_gym import LEGGED_GYM_ROOT_DIR, envs
-from time import time
-from warnings import WarningMessage
-import numpy as np
-import os
-
-from isaacgym.torch_utils import *
-from isaacgym import gymtorch, gymapi, gymutil
 
 import torch
-from torch import Tensor
-from typing import Tuple, Dict
+from legged_gym import LEGGED_GYM_ROOT_DIR
+from legged_gym.envs.igris_c.igris_c import IGRISC
+from legged_gym.envs.igris_c.igris_c_AMP_config import IGRISCAMPCfg
+from rsl_rl.datasets.motion_loader import AMPLoader
 
-from legged_gym.envs.base.legged_robot import LeggedRobot
-from rsl_rl.rsl_rl.datasets.motion_loader import AMPLoader
-from .amp_legged_robot_config import AMPLeggedRobotCfg
-
-class AMPLeggedRobot(LeggedRobot):
-    def __init__(self, cfg: AMPLeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
+class IGRISCAMP(IGRISC):
+    def __init__(self, cfg: IGRISCAMPCfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         if self.cfg.env.reference_state_initialization:
             self.reference_state_initialization_prob = getattr(
@@ -62,28 +23,6 @@ class AMPLeggedRobot(LeggedRobot):
                 )
             else:
                 self.amp_loader = None
-
-    def step_forced(self, joint_states: torch.Tensor, rootstate: torch.Tensor):
-        self.render()
-        self.reset()
-        self.root_states[:, :3] = rootstate[:3].view(1, -1)
-        self.root_states[0, :2] += 1.
-        self.root_states[:, 3:7] = quat_from_euler_xyz(rootstate[3], rootstate[4], rootstate[5]).unsqueeze(dim=0)
-        self.root_states[:, 7:] = rootstate[6:].view(1, -1)
-        env_ids_int32 = torch.arange(self.num_envs, device=self.device).to(dtype=torch.int32)
-        self.gym.set_actor_root_state_tensor_indexed(self.sim,
-                                                     gymtorch.unwrap_tensor(self.root_states),
-                                                     gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
-
-        lower_body_pos = joint_states[self.action_offset:self.action_offset+self.num_actions].view(-1,1)
-        lower_body_vel = torch.zeros_like(lower_body_pos)
-        lower_body = torch.cat((lower_body_pos, lower_body_vel), dim=-1)
-        joint_angles = torch.tile(lower_body, (self.num_envs, 1))
-        self.gym.set_dof_state_tensor(self.sim,
-                                               gymtorch.unwrap_tensor(joint_angles))
-        self.gym.simulate(self.sim)
-        if self.device == 'cpu':
-            self.gym.fetch_results(self.sim, True)
             
     def compute_termination_observations(self, env_ids):
         """ Computes observations
@@ -120,6 +59,7 @@ class AMPLeggedRobot(LeggedRobot):
             'root_angvel': self.root_states[:, 10:13],
             'kb_pos': kb_pos,
         }
+
 
     #------------- Callbacks --------------
     def _reset_states(self, env_ids):
