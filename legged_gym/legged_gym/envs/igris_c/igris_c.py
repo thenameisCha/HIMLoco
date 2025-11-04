@@ -6,14 +6,17 @@ from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi
 from isaacgym.torch_utils import *
-
+import numpy as np
 
 class IGRISC(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
 
     def get_current_obs(self):
+        sin_phase = torch.sin(2 * np.pi * self.phase ).unsqueeze(1)
+        cos_phase = torch.cos(2 * np.pi * self.phase ).unsqueeze(1)
         current_obs = torch.cat((   
+                                    sin_phase, cos_phase,
                                     self.commands[:, :3] * self.commands_scale,
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
                                     self.projected_gravity,
@@ -42,9 +45,9 @@ class IGRISC(LeggedRobot):
         mirror_obs = obs.clone()
         start=0
         # commands
-        num_section = 3
-        mirror_obs[:, 1] *= -1
-        mirror_obs[:, 2] *= -1
+        num_section = 5
+        mirror_obs[:, 3] *= -1
+        mirror_obs[:, 4] *= -1
         start += num_section
         # ang vel
         num_section=3
@@ -128,7 +131,6 @@ class IGRISC(LeggedRobot):
         assert start == self.num_one_step_privileged_obs, f'_mirror_observations size mismatch, obs shape : {obs.shape}, mirror obs length : {start}'
         return mirror_obs
           
-
     def _compute_joint_limits(self):
         limits = self.hard_dof_pos_limits[0]  # [dof, 2]
         B = self.dof_pos.shape[0]
@@ -272,78 +274,46 @@ class IGRISC(LeggedRobot):
         compute_side(L_roll, L_pitch)
         compute_side(R_roll, R_pitch)
 
+        
+    def _post_physics_step_callback(self):
+        period = 1.0
+        offset = 0.6
+        self.phase = (self.episode_length_buf * self.dt) % period / period
+        self.phase_left = self.phase
+        self.phase_right = (self.phase + offset) % 1
+        self.leg_phase = torch.cat([self.phase_left.unsqueeze(1), self.phase_right.unsqueeze(1)], dim=-1)
+        
+        return super()._post_physics_step_callback()
+    
 
     #------------ reward functions----------------
 
-    def _reward_upper_regularization(self):
-        num_arms = self.num_actions-self.cfg.env.num_waist-self.cfg.env.num_lower_actions
-        WY = 0
-        WR = self.action_offset if self.cfg.env.num_waist==2 else WY+1
-        WP = WR+1
-        LHP = self.action_offset+self.cfg.env.num_waist
-        LHR = LHP+1
-        LHY = LHR+1
-        LKP = LHY+1
-        LAP = LKP+1
-        LAR = LAP+1
-        RHP = LHP+self.cfg.env.num_lower_actions//2
-        RHR = LHR+self.cfg.env.num_lower_actions//2
-        RHY = LHY+self.cfg.env.num_lower_actions//2
-        RKP = LKP+self.cfg.env.num_lower_actions//2
-        RAP = LAP+self.cfg.env.num_lower_actions//2
-        RAR = LAR+self.cfg.env.num_lower_actions//2
-        LSP = self.action_offset+self.cfg.env.num_waist+self.cfg.env.num_lower_actions
-        LSR = LSP+1
-        LSY = LSR+1
-        LEP = LSY+1
-        RSP = LSP+num_arms//2
-        RSR = LSR+num_arms//2
-        RSY = LSY+num_arms//2
-        REP = LEP+num_arms//2
-        joint_idx = torch.tensor([
-            WR,
-            WP,
-            LHR, LHY,
-            LAR,
-            RHR, RHY,
-            RAR,
-        ], device=self.device)
-        joint_idx_upper = torch.tensor([
-            # WY,
-            LSP, LSR, LSY, LEP,
-            RSP, RSR, RSY, REP
-        ], device=self.device)
-        joint_sigma_upper = torch.tensor([
-            # .1,
-            .3, .1, .1, .3,
-            .3, .1, .1, .3
-        ], device=self.device).unsqueeze(dim=0)
-        return torch.exp(-torch.mean(torch.square(self.dof_pos[:, joint_idx_upper] - self.default_dof_pos[:, joint_idx_upper]) / joint_sigma_upper, dim=1))
-       
-    def _reward_base_height(self):
-        # Penalize base height away from target
-        base_height = self._get_base_heights()
-        return torch.exp(-torch.square(base_height - self.cfg.rewards.base_height_target) / 0.1)
+    def _reward_contact(self):
+        res = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        for i in range(self.feet_num):
+            is_stance = self.leg_phase[:, i] < 0.55
+            contact = self.contact_forces[:, self.feet_indices[i], 2] > 1
+            res += ~(contact ^ is_stance)
+        return res
     
-    def _reward_orientation(self):
-        # Penalize non flat base orientation
-        r, p, _ = get_euler_xyz(self.base_quat)
-        r, p = wrap_to_pi(r), wrap_to_pi(p)
-        return torch.exp(-(r.square()/0.5 + p.square()/0.5)/2)
-
-    def _reward_stand_still(self):
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
-        standstill_envs = (torch.norm(self.commands[:, :2], dim=1) < 0.1) & (torch.norm(self.rb_states[:, self.feet_indices[0], :2] - self.rb_states[:, self.feet_indices[1], :2], dim=-1) < 0.3)
-        ret = torch.zeros((self.num_envs,), device=self.device)
-        ret[standstill_envs] = (
-            (l_contact * r_contact)*\
-        (
-            torch.exp(-(self.dof_pos - self.default_dof_pos).square().amax(dim=-1)/0.1)+\
-            torch.exp(-self.dof_vel.square().amax(dim=-1)/0.1)
-        )
-        )[standstill_envs]
-        return ret
+    def _reward_feet_swing_height(self):
+        contact = torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=2) > 1.
+        pos_error = torch.square((self.feet_pos[:, :, 2] - self.feet_pos[:, :, 2].amin(dim=-1)) - 0.08) * ~contact
+        return torch.sum(pos_error, dim=(1))
+    
+    def _reward_alive(self):
+        # Reward for staying alive
+        return 1.0
+    
+    def _reward_contact_no_vel(self):
+        # Penalize contact with no velocity
+        contact = torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=2) > 1.
+        contact_feet_vel = self.feet_vel * contact.unsqueeze(-1)
+        penalize = torch.square(contact_feet_vel[:, :, :3])
+        return torch.sum(penalize, dim=(1,2))
+    
+    def _reward_hip_pos(self):
+        return torch.sum(torch.square(self.dof_pos[:,[3,4,9,10]]), dim=1)
 
 ### HELPERS ###    
 def cubic(start_pos, start_vel, end_pos, end_vel, end_time, current_time: torch.Tensor):

@@ -80,7 +80,7 @@ class HIMEstimator(nn.Module):
                 param_group['lr'] = self.learning_rate
                 
         vel = next_critic_obs[:, self.num_one_step_obs:self.num_one_step_obs+3].detach()
-        next_obs = next_critic_obs.detach()[:, 3:self.num_one_step_obs+3]
+        next_obs = next_critic_obs.detach()[:, 5:self.num_one_step_obs+5]
 
         z_s = self.encoder(obs_history)
         z_t = self.target(next_obs)

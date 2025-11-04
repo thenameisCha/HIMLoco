@@ -3,9 +3,9 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class IGRISCCfg( LeggedRobotCfg ):
     class env(LeggedRobotCfg.env):
-        num_one_step_observations = 51
+        num_one_step_observations = 53
         num_observations = num_one_step_observations * 6
-        num_one_step_privileged_obs = 51 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
+        num_one_step_privileged_obs = 53 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 14
         num_waist = 2 # How many waist joints are in the action
@@ -228,22 +228,42 @@ class IGRISCCfg( LeggedRobotCfg ):
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         class scales:
-            termination = -200.
-            tracking_ang_vel = 1.0
-            torques = -5.e-6
-            dof_acc = -2.e-7
-            lin_vel_z = -0.5
-            feet_air_time = 5.
-            dof_pos_limits = -1.
-            no_fly = 0.25
-            dof_vel = -0.0
-            ang_vel_xy = -0.0
-            feet_contact_forces = -0.
+            # termination = -200.
+            # tracking_ang_vel = 1.0
+            # torques = -5.e-6
+            # dof_acc = -2.e-7
+            # lin_vel_z = -0.5
+            # feet_air_time = 5.
+            # dof_pos_limits = -1.
+            # no_fly = 0.25
+            # dof_vel = -0.0
+            # ang_vel_xy = -0.0
+            # feet_contact_forces = -0.
 
+            # tracking_lin_vel = 1.0
+            # orientation = -0.
+            # collision = -1.
+            # action_rate = -0.01
+
+            # g1 setting
             tracking_lin_vel = 1.0
-            orientation = -0.
-            collision = -1.
+            tracking_ang_vel = 0.5
+            lin_vel_z = -2.0
+            ang_vel_xy = -0.05
+            orientation = -1.0
+            base_height = -10.0
+            dof_acc = -2.5e-7
+            dof_vel = -1e-3
+            feet_air_time = 0.0
+            collision = 0.0
             action_rate = -0.01
+            dof_pos_limits = -5.0
+            alive = 0.15
+            hip_pos = -1.0
+            contact_no_vel = -0.2
+            feet_swing_height = -20.0
+            contact = 0.18
+            
 
     class commands(LeggedRobotCfg.commands):
         num_commands = 4
