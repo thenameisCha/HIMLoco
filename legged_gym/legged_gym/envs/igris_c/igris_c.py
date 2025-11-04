@@ -296,6 +296,7 @@ class IGRISC(LeggedRobot):
         vx     = self.commands[env_ids, 0]
         vy     = self.commands[env_ids, 1]
         omega  = self.commands[env_ids, 2]
+        phase_ind = self.phase_indicator[env_ids]
         dpsi   = (
             T * omega
         )
@@ -305,11 +306,11 @@ class IGRISC(LeggedRobot):
 
         # Your original lateral placement (nominal y without yaw coupling)
         y_nom = (
-            (self.phase_indicator[env_ids] * (2 * T * vy + self.cfg.commands.default_feet_width)
-            - (1 - self.phase_indicator[env_ids]) * self.cfg.commands.default_feet_width) * (vy >= 0.)
+            (phase_ind * (2 * T * vy + self.cfg.commands.default_feet_width)
+            - (1 - phase_ind) * self.cfg.commands.default_feet_width) * (vy >= 0.)
             +
-            ((1 - self.phase_indicator[env_ids]) * (2 * T * vy - self.cfg.commands.default_feet_width)
-            + self.phase_indicator[env_ids] * self.cfg.commands.default_feet_width) * (vy < 0.)
+            ((1 - phase_ind) * (2 * T * vy - self.cfg.commands.default_feet_width)
+            + phase_ind * self.cfg.commands.default_feet_width) * (vy < 0.)
         )
 
         # First-order rotation of the nominal target by Δψ = ωT (Raibert small-angle coupling)

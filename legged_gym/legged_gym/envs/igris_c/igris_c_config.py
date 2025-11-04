@@ -296,7 +296,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = 'HIMActorCritic'
 
         min_normalized_std = .1
-        LOG_WANDB = False
+        LOG_WANDB = True
         env_name = 'igris_c'
         file_name = 'igris_c'
         config_name = 'igris_c'
