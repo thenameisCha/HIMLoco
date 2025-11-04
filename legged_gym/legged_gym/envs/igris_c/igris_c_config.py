@@ -56,23 +56,23 @@ class IGRISCCfg( LeggedRobotCfg ):
     class control(LeggedRobotCfg.control):
         stiffness = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": 50,
-            "Joint_Hip_Roll_Left": 50,
-            "Joint_Hip_Yaw_Left": 12.0,
-            "Joint_Knee_Pitch_Left": 30,
-            "Joint_Ankle_Pitch_Left": 7,
-            "Joint_Ankle_Roll_Left": 5,
+            "Joint_Hip_Pitch_Left": 100,
+            "Joint_Hip_Roll_Left": 100,
+            "Joint_Hip_Yaw_Left": 50.0,
+            "Joint_Knee_Pitch_Left": 100,
+            "Joint_Ankle_Pitch_Left": 50,
+            "Joint_Ankle_Roll_Left": 50,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": 50,
-            "Joint_Hip_Roll_Right": 50,
-            "Joint_Hip_Yaw_Right": 12.0,
-            "Joint_Knee_Pitch_Right": 30,
-            "Joint_Ankle_Pitch_Right": 7,
-            "Joint_Ankle_Roll_Right": 5,
+            "Joint_Hip_Pitch_Right": 100,
+            "Joint_Hip_Roll_Right": 100,
+            "Joint_Hip_Yaw_Right": 50.0,
+            "Joint_Knee_Pitch_Right": 100,
+            "Joint_Ankle_Pitch_Right": 50,
+            "Joint_Ankle_Roll_Right": 50,
             # Waist + Neck (5)
             # "Joint_Waist_Yaw": 100.0,
-            "Joint_Waist_Roll": 20.0,
-            "Joint_Waist_Pitch": 20.0,
+            "Joint_Waist_Roll": 50.0,
+            "Joint_Waist_Pitch": 50.0,
             # "Joint_Neck_Yaw": 30.0,
             # "Joint_Neck_Pitch": 30.0,
             # # Left arm (7)
@@ -94,23 +94,23 @@ class IGRISCCfg( LeggedRobotCfg ):
         }
         damping = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": 2.5,
-            "Joint_Hip_Roll_Left": 2.5,
-            "Joint_Hip_Yaw_Left": 0.7,
-            "Joint_Knee_Pitch_Left": 2.0,
-            "Joint_Ankle_Pitch_Left": 0.8,
-            "Joint_Ankle_Roll_Left": 0.7,
+            "Joint_Hip_Pitch_Left": 4.0,
+            "Joint_Hip_Roll_Left": 4.0,
+            "Joint_Hip_Yaw_Left": 2.0,
+            "Joint_Knee_Pitch_Left": 4.0,
+            "Joint_Ankle_Pitch_Left": 2.5,
+            "Joint_Ankle_Roll_Left": 2.5,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": 2.5,
-            "Joint_Hip_Roll_Right": 2.5,
-            "Joint_Hip_Yaw_Right": 0.7,
-            "Joint_Knee_Pitch_Right": 2.0,
-            "Joint_Ankle_Pitch_Right": 0.8,
-            "Joint_Ankle_Roll_Right": 0.7,
+            "Joint_Hip_Pitch_Right": 4.0,
+            "Joint_Hip_Roll_Right": 4.0,
+            "Joint_Hip_Yaw_Right": 2.0,
+            "Joint_Knee_Pitch_Right": 4.0,
+            "Joint_Ankle_Pitch_Right": 2.5,
+            "Joint_Ankle_Roll_Right": 2.5,
             # # Waist + Neck (5)
             # "Joint_Waist_Yaw": 2.0,
-            "Joint_Waist_Roll": 0.6,
-            "Joint_Waist_Pitch": 0.6,
+            "Joint_Waist_Roll": 2.0,
+            "Joint_Waist_Pitch": 2.0,
             # "Joint_Neck_Yaw": 1.0,
             # "Joint_Neck_Pitch": 1.0,
             # # Left arm (7)
@@ -135,9 +135,9 @@ class IGRISCCfg( LeggedRobotCfg ):
         # action scale: target angle = actionScale * action + defaultAngle
 
         action_scale = [
-            3., 3.,
-            3., 3., 5., 5., 10., 10.,
-            3., 3., 5., 5., 10., 10.,
+            1., 1.,
+            1., 1., 1., 1., 1., 1.,
+            1., 1., 1., 1., 1., 1.,
             # 1., 1., 1., 2.,
             # 1., 1., 1., 2.,
         ]
@@ -226,28 +226,24 @@ class IGRISCCfg( LeggedRobotCfg ):
     class rewards( LeggedRobotCfg.rewards ):
         base_height_target = 0.95
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
+        only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         class scales:
-            # termination = -100.0
-            tracking_lin_vel = 1.0
+            termination = -200.
             tracking_ang_vel = 1.0
-            orientation = .5
-            base_height = 0.2 
-            feet_air_time = 5.0
+            torques = -5.e-6
+            dof_acc = -2.e-7
+            lin_vel_z = -0.5
+            feet_air_time = 5.
+            dof_pos_limits = -1.
             no_fly = 0.25
-            stand_still = 0.5
-            dof_pos = 0.2
+            dof_vel = -0.0
+            ang_vel_xy = -0.0
+            feet_contact_forces = -0.
 
-            # torques = -0.00001
-            dof_acc = -2.5e-7
+            tracking_lin_vel = 1.0
+            orientation = -0.
+            collision = -1.
             action_rate = -0.01
-            smoothness = -0.01
-            joint_power = -2.e-5
-            # contact_power = -1.e-2
-            # slow_touchdown = -0.2
-            # upper_regularization = 2.
-            # centroidal_momentum = 1.
-
 
     class commands(LeggedRobotCfg.commands):
         num_commands = 4

@@ -14,9 +14,9 @@ class IGRISC(LeggedRobot):
 
     def get_current_obs(self):
         current_obs = torch.cat((   
+                                    self.commands[:, :3] * self.commands_scale,
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
                                     self.projected_gravity,
-                                    self.commands[:, :3] * self.commands_scale,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
                                     self.actions
@@ -41,19 +41,19 @@ class IGRISC(LeggedRobot):
         num_arms = self.num_actions - num_waist - num_legs
         mirror_obs = obs.clone()
         start=0
-        num_section=3
-        # ang vel
-        mirror_obs[:, 0] *= -1
+        # commands
+        num_section = 3
+        mirror_obs[:, 1] *= -1
         mirror_obs[:, 2] *= -1
+        start += num_section
+        # ang vel
+        num_section=3
+        mirror_obs[:, 3] *= -1
+        mirror_obs[:, 5] *= -1
         start += num_section
         # projected gravity
         num_section = 3
-        mirror_obs[:, 4] *= -1
-        start += num_section
-        # commands
-        num_section = 3
         mirror_obs[:, 7] *= -1
-        mirror_obs[:, 8] *= -1
         start += num_section
         # dof pos
         num_section = self.num_actions
