@@ -39,7 +39,7 @@ import numpy as np
 import torch
 
 
-def play(args, x_vel=1.0, y_vel=0.0, yaw_vel=0.0):
+def play(args, x_vel=0.0, y_vel=0.0, yaw_vel=0.0):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     # override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
@@ -53,6 +53,7 @@ def play(args, x_vel=1.0, y_vel=0.0, yaw_vel=0.0):
     env_cfg.domain_rand.disturbance = False
     env_cfg.domain_rand.randomize_payload_mass = False
     env_cfg.commands.heading_command = False
+    train_cfg.runner.LOG_WANDB = False
     # env_cfg.terrain.mesh_type = 'plane'
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
@@ -103,7 +104,7 @@ def play(args, x_vel=1.0, y_vel=0.0, yaw_vel=0.0):
         if i < stop_state_log:
             logger.log_states(
                 {
-                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale + env.default_dof_pos[robot_index, joint_index].item(),
+                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale[joint_index] + env.default_dof_pos[robot_index, joint_index].item(),
                     'dof_pos': env.dof_pos[robot_index, joint_index].item(),
                     'dof_vel': env.dof_vel[robot_index, joint_index].item(),
                     'dof_torque': env.torques[robot_index, joint_index].item(),
@@ -132,4 +133,4 @@ if __name__ == '__main__':
     RECORD_FRAMES = False
     MOVE_CAMERA = False
     args = get_args()
-    play(args, x_vel=1.0, y_vel=0.0, yaw_vel=0.0)
+    play(args)

@@ -1479,3 +1479,10 @@ class LeggedRobot(BaseTask):
         contacts = self.contact_forces[:, self.feet_indices, 2] > 1.
         single_contact = torch.sum(1.*contacts, dim=1)==1
         return 1.*single_contact
+    
+    def _reward_survival(self):
+        return torch.ones((self.num_envs,), device=self.device)
+
+    def _reward_dof_pos(self):
+        return torch.exp(-torch.mean(torch.square(self.dof_pos - self.default_dof_pos), dim=1))
+    

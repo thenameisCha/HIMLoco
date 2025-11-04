@@ -131,7 +131,7 @@ class LeggedRobotCfg(BaseConfig):
 
     class domain_rand:
         randomize_payload_mass = True
-        payload_mass_range = [-1, 2]
+        payload_mass_range = [-2, 4]
 
         randomize_com_displacement = True
         com_displacement_range = [-0.05, 0.05]
@@ -149,7 +149,7 @@ class LeggedRobotCfg(BaseConfig):
         kd_range = [0.9, 1.1]
         
         randomize_initial_joint_pos = True
-        initial_joint_pos_range = [0.8, 1.2]
+        initial_joint_pos_range = [0.6, 1.4]
         
         disturbance = True
         disturbance_range = [-30.0, 30.0]
@@ -164,7 +164,7 @@ class LeggedRobotCfg(BaseConfig):
 
         # Randomizing these properties for each env reset leads to too slow training
         randomize_friction = True
-        friction_range = [0.2, 1.25]
+        friction_range = [0.2, 2.25]
         randomize_restitution = True
         restitution_range = [0., 1.0]
         randomize_damping = True
