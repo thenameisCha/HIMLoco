@@ -227,6 +227,7 @@ class IGRISCCfg( LeggedRobotCfg ):
         base_height_target = 0.95
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
+        clearance_height_target = -0.75
         class scales:
             termination = -200.
             tracking_lin_vel = 1.0
@@ -239,20 +240,18 @@ class IGRISCCfg( LeggedRobotCfg ):
             orientation = -2.
             dof_pos_limits = -2.
             dof_pos = -0.05
-            feet_air_time = 0.2
+            feet_air_time = 0.5
             feet_contact_forces = -5.e-3
             stumble = -2.0
             feet_sliding = -0.25
             no_fly = -1.
             collision = -1.
+            foot_clearance = -0.01
 
 
     class commands(LeggedRobotCfg.commands):
         num_commands = 4
         heading_command = True # if true: compute ang vel command from heading error
-        default_ankle_height = 0.072 # height from sole to ankle
-        default_feet_width = 0.22
-        default_apex_clearance = 0.06
         class ranges:
             lin_vel_x = [-0.5, 1.0] # min max [m/s]
             lin_vel_y = [-0.3, 0.3]   # min max [m/s]

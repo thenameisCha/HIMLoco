@@ -198,7 +198,7 @@ class LeggedRobotCfg(BaseConfig):
         soft_torque_limit = 1.
         base_height_target = 1.
         max_contact_force = 100. # forces above this value are penalized
-        clearance_height_target = 0.09
+        clearance_height_target = -0.7
 
     class normalization:
         class obs_scales:
