@@ -155,3 +155,18 @@ class IGRISCAMP(IGRISC):
         return torch.concat((Lfoot_positions_local, Rfoot_positions_local), dim=-1)
     
     #------------ reward functions----------------
+
+    def _reward_penalize_contact_power(self):
+        ret = torch.sum(torch.sum(self.contact_forces[:, self.feet_indices] * self.rb_states[:, self.feet_indices, 7:10], dim=-1).abs(), dim=-1)
+        ret[self.standstill_flag] = 0
+        return ret
+
+    def _reward_base_height(self):
+        # Penalize base height away from target
+        base_height = self._get_base_heights()
+        sigma = 0.1
+        return torch.exp(-torch.square(base_height - self.cfg.rewards.base_height_target) / sigma)
+
+    def _reward_orientation(self):
+        # Penalize non flat base orientation
+        return torch.exp(-self.projected_gravity[:, :2].square().sum(dim=-1)/0.3)

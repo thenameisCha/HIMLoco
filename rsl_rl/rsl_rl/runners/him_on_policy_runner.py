@@ -437,3 +437,30 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
             ep_infos.clear()
         self.current_learning_iteration += num_learning_iterations
         self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
+
+    def log_wandb(self, locs):
+        if self.LOG_WANDB:
+            wandb_dict = dict()
+            wandb_dict['n_updates'] = locs['it']
+            for key, val in locs['loss_dict'].items():
+                wandb_dict['Loss/'+key] = val
+            wandb_dict['Loss/learning_rate'] = self.alg.learning_rate
+            wandb_dict['perturbation_flag'] = 1. if self.env.start_perturb and self.env.cfg.domain_rand.push_robots else 0
+            wandb_dict["Policy/mean_noise_std"] = self.alg.actor_critic.std.mean()
+            if locs['ep_infos']:
+                for key in locs['ep_infos'][0]:
+                    infotensor = torch.tensor([], device=self.device)
+                    for ep_info in locs['ep_infos']:
+                        # handle scalar and zero dimensional tensor infos
+                        if not isinstance(ep_info[key], torch.Tensor):
+                            ep_info[key] = torch.Tensor([ep_info[key]])
+                        if len(ep_info[key].shape) == 0:
+                            ep_info[key] = ep_info[key].unsqueeze(0)
+                        infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
+                    value = torch.mean(infotensor)
+                    wandb_dict['Train/Mean_episode_' + key] = value.item()
+            if len(locs['rewbuffer']) > 0:
+                wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
+                wandb_dict['Train/Mean_episode_style_reward'] = statistics.mean(locs['amprewbuffer']) / self.env.dt               
+                wandb_dict['Train/mean_episode_length_t'] = statistics.mean(locs['lenbuffer']) * self.env.dt
+                wandb.log(wandb_dict)
