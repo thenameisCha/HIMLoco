@@ -346,9 +346,14 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
         )
 
     def save(self, path, infos=None):
-        super().save(path, infos)
         torch.save({
-            'discriminator_state_dict': self.alg.discriminator.state_dict()
+            'model_state_dict': self.alg.actor_critic.state_dict(),
+            'discriminator_state_dict': self.alg.discriminator.state_dict(),
+            'optimizer_state_dict': self.alg.optimizer.state_dict(),
+            'estimator_optimizer_state_dict': self.alg.actor_critic.estimator.optimizer.state_dict(),
+            'obs_normalizer_state_dict': self.env.normalizer_obs.state_dict(),
+            'iter': self.current_learning_iteration,
+            'infos': infos,
             }, path)
 
     def load(self, path, load_optimizer = True):
