@@ -301,9 +301,9 @@ class IGRISC(LeggedRobot):
         return ret
     
     def _reward_dof_pos(self):
-        i = [2, 5, 6, 8, 11, 12]
-        j = [0]
-        k = [1, 3, 4, 7, 9, 10, 13]
+        i = [3, 6, 7, 9, 12, 13]
+        j = [0, 1]
+        k = [2, 4, 5, 8, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22]
         ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
         ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
         ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
