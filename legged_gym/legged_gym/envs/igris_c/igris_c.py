@@ -316,13 +316,15 @@ class IGRISC(LeggedRobot):
         contact_filt = torch.logical_or(contact, self.last_contacts) 
         condition = (contact.long().sum(dim=-1) == 1)
         self.feet_air_time += self.dt
-        rew_airTime = torch.sum(torch.clip(self.feet_air_time, max=0.4) * condition, dim=1) # reward only on first contact with the ground
-        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
+        self.feet_contact_time += self.dt
+        rew_airTime = torch.sum(torch.clip(self.feet_air_time+self.feet_contact_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
+        rew_airTime *= torch.norm(self.commands[:, :3], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
+        self.feet_contact_time *= torch.logical_and(contact, self.last_contacts) 
         return rew_airTime
 
     def _reward_feet_contact_forces(self):
-        ret = torch.min(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1)-700., 400)
+        ret = torch.clip(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1)-700., max=400)
         return ret*(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1) > 700)
 
     def _reward_stumble(self):
