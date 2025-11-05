@@ -52,6 +52,9 @@ class PPO:
                  schedule="fixed",
                  desired_kl=0.01,
                  device='cpu',
+                 min_std=None,
+                 LCP_cfg: dict = {'use_LCP': False},
+                 symmetry_cfg: dict = {'enforce_symmetry': False,},
                  ):
 
         self.device = device
@@ -59,6 +62,11 @@ class PPO:
         self.desired_kl = desired_kl
         self.schedule = schedule
         self.learning_rate = learning_rate
+        self.use_LCP = LCP_cfg['use_LCP']
+        self.smooth_coef = LCP_cfg['smooth_coef']
+        self.LCP_cfg = LCP_cfg
+        self.enforce_symmetry = symmetry_cfg['enforce_symmetry']
+        self.symmetry_cfg = symmetry_cfg
 
         # PPO components
         self.actor_critic = actor_critic
@@ -66,6 +74,7 @@ class PPO:
         self.storage = None # initialized later
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
         self.transition = RolloutStorage.Transition()
+        self.min_std = min_std
 
         # PPO parameters
         self.clip_param = clip_param
@@ -101,7 +110,8 @@ class PPO:
         self.transition.critic_observations = critic_obs
         return self.transition.actions
     
-    def process_env_step(self, rewards, dones, infos):
+    def process_env_step(self, rewards, dones, infos, next_critic_obs):
+        self.transition.next_critic_observations = next_critic_obs.clone()
         self.transition.rewards = rewards.clone()
         self.transition.dones = dones
         # Bootstrapping on time outs
@@ -124,7 +134,7 @@ class PPO:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         else:
             generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
-        for obs_batch, critic_obs_batch, actions_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
+        for obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
             old_mu_batch, old_sigma_batch, hid_states_batch, masks_batch in generator:
 
 
@@ -175,6 +185,9 @@ class PPO:
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                if not self.actor_critic.fixed_std and self.min_std is not None:
+                    self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
+
 
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
@@ -183,5 +196,64 @@ class PPO:
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
         self.storage.clear()
+        loss_dict = {
+            "value_function": mean_value_loss,
+            "surrogate": mean_surrogate_loss,
+        }
+        return loss_dict
 
-        return mean_value_loss, mean_surrogate_loss
+    def _calc_grad_penalty(self, obs_batch, actions_log_prob_batch = None):
+        # Compute gradients separately for obs_batch and history_batch
+        grad_log_prob_obs = torch.autograd.grad(
+            actions_log_prob_batch.sum(),
+            obs_batch,
+            create_graph=True,
+        )[0]
+
+        # Ensure gradients are not None
+        assert grad_log_prob_obs is not None, "Gradient for obs_batch is None."
+
+        # Calculate the gradient penalty loss
+        gradient_penalty_loss = torch.sum(torch.square(grad_log_prob_obs), dim=-1).mean()            
+
+        return gradient_penalty_loss
+        
+    def mirror_actions(self, actions: torch.Tensor):
+        target_mirrored_action_mean = actions.detach().clone()
+        with torch.no_grad():
+            num_waist = self.symmetry_cfg['num_waist']
+            num_legs = self.symmetry_cfg['num_legs']
+            num_arms = self.symmetry_cfg['num_arms']
+
+            start = 0
+            num_section = num_waist
+            end = start + num_section
+            if num_waist:
+                target_mirrored_action_mean[..., :end-1] *= -1
+            # Lower body
+            start = end
+            num_section = num_legs
+            end = start + num_section
+            target_mirrored_action_mean[..., start:start+num_section//2] = actions[..., start+num_section//2:end]
+            target_mirrored_action_mean[..., start+num_section//2:end] = actions[..., start:start+num_section//2]
+            target_mirrored_action_mean[..., start+1:start+1+2] *= -1
+            target_mirrored_action_mean[..., start+num_section//2-1] *= -1
+            target_mirrored_action_mean[..., start+num_section//2+1:start+num_section//2+1+2] *= -1
+            target_mirrored_action_mean[..., end-1] *= -1
+            # Upper body
+            if num_arms > 0:
+                start = end
+                num_section = num_arms
+                end = start + num_section
+                if num_arms:
+                    target_mirrored_action_mean[..., start:start+num_section//2] = actions[..., start+num_section//2:end]
+                    target_mirrored_action_mean[..., start+num_section//2:end] = actions[..., start:start+num_section//2]
+                    target_mirrored_action_mean[..., start+1] *= -1
+                    target_mirrored_action_mean[..., start+num_section//2+1] *= -1
+                    if num_arms == 8: # shoulder yaw in action space
+                        target_mirrored_action_mean[..., start+2] *= -1
+                        target_mirrored_action_mean[..., start+num_section//2+2] *= -1
+
+            assert end == actions.shape[-1], f'change params in mirror actions! action dim : {actions.shape[-1]}, mirror index end : {end}'
+
+        return target_mirrored_action_mean
