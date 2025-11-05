@@ -228,38 +228,24 @@ class IGRISCCfg( LeggedRobotCfg ):
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         class scales:
-            # termination = -200.
-            # tracking_ang_vel = 1.0
-            # torques = -5.e-6
-            # dof_acc = -2.e-7
-            # lin_vel_z = -0.5
-            # feet_air_time = 5.
-            # dof_pos_limits = -1.
-            # no_fly = 0.25
-            # dof_vel = -0.0
-            # ang_vel_xy = -0.0
-            # feet_contact_forces = -0.
-
-            # tracking_lin_vel = 1.0
-            # orientation = -0.
-            # collision = -1.
-            # action_rate = -0.01
-
-            # g1 setting
+            termination = -200.
             tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
+            tracking_ang_vel = 1.0
+            lin_vel_z = -1.
+            joint_power = -1.e-3
             ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
             dof_acc = -2.5e-7
-            dof_vel = -1e-3
             action_rate = -0.01
-            swing_push = 2.0
-            swing_ori = 1.0
-            feet_sliding = -1.e-2
-            dof_pos_limits = -100.
-            
+            orientation = -2.
+            dof_pos_limits = -2.
+            dof_pos = -0.05
+            feet_air_time = 0.2
+            feet_contact_forces = -5.e-3
+            stumble = -2.0
+            feet_sliding = -0.25
+            no_fly = -1.
+            collision = -1.
+
 
     class commands(LeggedRobotCfg.commands):
         num_commands = 4
@@ -278,7 +264,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
         # LCP loss
         LCP_cfg = {
             'use_LCP': False,
-            'smooth_coef': 1.e-3,
+            'smooth_coef': 2.e-3,
             'mask': [
             ]
         }

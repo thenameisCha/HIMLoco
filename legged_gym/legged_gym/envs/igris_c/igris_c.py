@@ -12,10 +12,7 @@ class IGRISC(LeggedRobot):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
 
     def get_current_obs(self):
-        cos_phase =  torch.cos(2 * torch.pi * self.phase ).unsqueeze(1)
-        sin_phase = torch.sin(2 * torch.pi * self.phase ).unsqueeze(1)
         current_obs = torch.cat((   
-                                    cos_phase, sin_phase,
                                     self.commands[:, :3] * self.commands_scale,
                                     self.base_ang_vel  * self.obs_scales.ang_vel,
                                     self.projected_gravity,
@@ -25,7 +22,7 @@ class IGRISC(LeggedRobot):
                                     ),dim=-1)
         # add noise if needed
         if self.add_noise:
-            current_obs[:, 2:] += (2 * torch.rand_like(current_obs[:, 2:]) - 1) * self.noise_scale_vec[0:(9 + 3 * self.num_actions)]
+            current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[0:(9 + 3 * self.num_actions)]
 
         # add perceptive inputs if not blind
         current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel, self.disturbance[:, 0, :]), dim=-1)
@@ -44,11 +41,9 @@ class IGRISC(LeggedRobot):
         mirror_obs = obs.clone()
         start=0
         # commands
-        num_section = 5
-        mirror_obs[:, 0] *= 1
-        mirror_obs[:, 1] *= 1
-        mirror_obs[:, 3] *= -1
-        mirror_obs[:, 4] *= -1
+        num_section = 3
+        mirror_obs[:, 1] *= -1
+        mirror_obs[:, 2] *= -1
         start += num_section
         # ang vel
         num_section=3
@@ -278,63 +273,6 @@ class IGRISC(LeggedRobot):
 
         compute_side(L_roll, L_pitch)
         compute_side(R_roll, R_pitch)
-  
-    def _post_physics_step_callback(self):
-        period = 1.
-        offset = 0.5
-        self.phase = (self.episode_length_buf * self.dt) % period / period
-        self.phase_left = self.phase
-        self.phase_right = (self.phase + offset) % 1
-        self.phase_indicator = (self.phase >= 0.5).long() # phase indicator=1 means left is swing
-        self.leg_phase = torch.cat([self.phase_left.unsqueeze(1), self.phase_right.unsqueeze(1)], dim=-1)
-        phase_change_envs = torch.arange(self.num_envs, device=self.device)[(self.phase < 1.e-3) | ((self.phase - 0.5).abs() < 1.e-3)]
-        self._update_raibert_footholds(phase_change_envs)
-        self._update_standstill_flags(phase_change_envs)
-        return super()._post_physics_step_callback()
-
-    def _update_raibert_footholds(self, env_ids):
-        """With current command velocities, compute target footholds based on Raibert's heuristic.
-        Footholds are in stance frame coordinates.
-        """
-        T      = 1.
-        vx     = self.commands[env_ids, 0]
-        vy     = self.commands[env_ids, 1]
-        omega  = self.commands[env_ids, 2]
-        phase_ind = self.phase_indicator[env_ids]
-        dpsi   = (
-            T * omega
-        )
-
-        # Nominal forward placement (no yaw coupling yet)
-        x_nom = T * vx
-
-        # Your original lateral placement (nominal y without yaw coupling)
-        y_nom = (
-            (phase_ind * (2 * T * vy + self.cfg.commands.default_feet_width)
-            - (1 - phase_ind) * self.cfg.commands.default_feet_width) * (vy >= 0.)
-            +
-            ((1 - phase_ind) * (2 * T * vy - self.cfg.commands.default_feet_width)
-            + phase_ind * self.cfg.commands.default_feet_width) * (vy < 0.)
-        )
-
-        # First-order rotation of the nominal target by Δψ = ωT (Raibert small-angle coupling)
-        c, s = torch.cos(dpsi), torch.sin(dpsi)
-        x =  x_nom * c - y_nom * s
-        y =  x_nom * s + y_nom * c
-        self.target_raibert_footholds[env_ids, 0] = x
-        self.target_raibert_footholds[env_ids, 1] = y
-
-        # self.target_raibert_footholds[env_ids, 0] = x_nom
-        # self.target_raibert_footholds[env_ids, 1] = y_nom
-
-        # Optional: keep your safety check or clamp to enforce minimum width
-        # assert not (y.abs() < self.cfg.commands.default_feet_width).any(), \
-        #     f'Foot width target under self.cfg.commands.default_feet_width! At ' \
-        #     f'{torch.nonzero(y.abs() < self.cfg.commands.default_feet_width, as_tuple=True)[0]}, ' \
-        #     f'Values {torch.nonzero(y.abs() < self.cfg.commands.default_feet_width)[1]}'
-
-        # Foot yaw target (unchanged): desired heading change this step
-        self.target_raibert_footholds[env_ids, 2] = dpsi
 
     def _update_standstill_flags(self, env_ids):
         if env_ids.numel():
@@ -350,55 +288,6 @@ class IGRISC(LeggedRobot):
 
     #------------ reward functions----------------
 
-    def _reward_swing_push(self):
-        # Pushes the swing foot towards the target foothold, without specifying a dense trajectory
-        # https://arxiv.org/pdf/2408.02662
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 1.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 1.).float()
-        phase_sine = torch.sin(2*torch.pi*self.phase)
-        env_list = torch.arange(self.num_envs, device=self.device)
-
-        stance_idx = self.feet_indices[self.phase_indicator]
-        swing_idx = self.feet_indices[1-self.phase_indicator]
-        stance_state_global_frame = self.rb_states[env_list, stance_idx]
-        swing_state_global_frame = self.rb_states[env_list, swing_idx]
-
-        xy0 = torch.cat((self.target_raibert_footholds[:, :2], torch.zeros((self.num_envs, 1), device=self.device)), dim=-1)
-        target_swing_pos_global_frame = stance_state_global_frame[:, :3] + quat_apply_yaw(stance_state_global_frame[:, 3:7], xy0)
-        swing_pos_global_frame = swing_state_global_frame[:, :3]
-
-        ret = (l_contact - r_contact)*\
-            (phase_sine/torch.sqrt(phase_sine.square()+0.04))*\
-                torch.exp(-torch.norm(swing_pos_global_frame[:, :2] - target_swing_pos_global_frame[:, :2], dim=-1)/0.25)
-
-        ret[self.standstill_flag] = self._compute_standstill_reward()
-        return ret
-    
-    def _reward_swing_ori(self):
-        # Pushes the swing foot towards the target foothold, without specifying a dense trajectory
-        # https://arxiv.org/pdf/2408.02662
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 1.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 1.).float()
-        phase_sine = torch.sin(2*torch.pi*self.phase)
-        env_list = torch.arange(self.num_envs, device=self.device)
-
-        stance_idx = self.feet_indices[self.phase_indicator]
-        swing_idx = self.feet_indices[1-self.phase_indicator]
-        stance_state_global_frame = self.rb_states[env_list, stance_idx]
-        swing_state_global_frame = self.rb_states[env_list, swing_idx]
-
-        _, _, stance_y = get_euler_xyz(stance_state_global_frame[:, 3:7])
-        _, _, swing_y = get_euler_xyz(swing_state_global_frame[:, 3:7])
-        target_swing_yaw_global_frame = stance_y + self.target_raibert_footholds[:, 2]
-
-        yaw_diff = wrap_to_pi(target_swing_yaw_global_frame - swing_y)
-        ret = (l_contact - r_contact)*\
-            (phase_sine/torch.sqrt(phase_sine.square()+0.04))*\
-                torch.exp(-yaw_diff.square()/0.25)
-
-        ret[self.standstill_flag] = self._compute_standstill_reward()
-        return ret
-    
     def _compute_standstill_reward(self):
         l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
         r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
@@ -411,11 +300,46 @@ class IGRISC(LeggedRobot):
         )[self.standstill_flag]
         return ret
     
+    def _reward_dof_pos(self):
+        i = [2, 5, 6, 8, 11, 12]
+        j = [0]
+        k = [1, 3, 4, 7, 9, 10, 13]
+        ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
+        ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        return ret_i + ret_j + ret_k
+
+    def _reward_feet_air_time(self):
+        # Reward long steps
+        # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
+        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
+        contact_filt = torch.logical_or(contact, self.last_contacts) 
+        condition = (contact.long().sum(dim=-1) == 1)
+        self.feet_air_time += self.dt
+        rew_airTime = torch.sum(torch.clip(self.feet_air_time, max=0.4) * condition, dim=1) # reward only on first contact with the ground
+        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
+        self.feet_air_time *= ~contact_filt
+        return rew_airTime
+
+    def _reward_feet_contact_forces(self):
+        ret = torch.min(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1)-700., 400)
+        return ret*(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1) > 700)
+
+    def _reward_stumble(self):
+        # Penalize feet hitting vertical surfaces
+        return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
+            torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+        
     def _reward_feet_sliding(self):
-        return torch.sum(self.rb_states[:, self.feet_indices, 7:9].norm(dim=-1)*(self.contact_forces[:, self.feet_indices, 2] > 1.).float(), dim=-1)
-    
-    def _reward_dof_pos_limits(self):
-        # Penalize dof positions too close to the limit
-        out_of_limits = (self.dof_pos < self.dof_pos_limits[..., 0]) # lower limit
-        out_of_limits |= (self.dof_pos > self.dof_pos_limits[..., 1])
-        return torch.sum(out_of_limits, dim=1)
+        # Penalize feet hitting vertical surfaces
+        return torch.sum(torch.norm(self.feet_vel[..., :2], dim=-1) * (self.contact_forces[:, self.feet_indices, 2] > 1.), dim=1)
+        
+    def _reward_no_fly(self):
+        contacts = self.contact_forces[:, self.feet_indices, 2] > 1.
+        double_contact = torch.sum(1.*contacts, dim=1)==0
+        return 1.*double_contact
+
+    def _reward_collision(self):
+        contact_forces_masked = self.contact_forces.clone()
+        contact_forces_masked[:, self.feet_indices, :] = 0.
+        return torch.sum(1.*(torch.norm(contact_forces_masked, dim=-1) > 1.), dim=-1)
