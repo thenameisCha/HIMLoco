@@ -58,33 +58,6 @@ class IGRISCAMPCfg( IGRISCCfg ):
         amp_preload_transitions = True
         amp_num_preload_transitions = 2000000
 
-    class rewards( IGRISCCfg.rewards ):
-        base_height_target = 0.95
-        soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
-        only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        class scales:
-            termination = 0.0
-            joint_power = -2.e-4
-            tracking_lin_vel = 2.
-            tracking_ang_vel = 1.
-            base_height = 0.5
-            orientation = 1.
-            dof_pos = 0.2
-            penalize_contact_power = -1.e-2
-            slow_touchdown = -0.2
-            torques = -5.e-6
-            swing_push = 4.
-            swing_ori = 2.
-
-    class commands(IGRISCCfg.commands):
-        num_commands = 4
-        heading_command = True # if true: compute ang vel command from heading error
-        class ranges:
-            lin_vel_x = [-0., 1.0] # min max [m/s]
-            lin_vel_y = [-0., 0.]   # min max [m/s]
-            ang_vel_yaw = [-1., 1.]    # min max [rad/s]
-            heading = [-3.14, 3.14]
-
 class IGRISCAMPCfgPPO(IGRISCCfgPPO):
     runner_class_name = 'HIMOnPolicyRunner_AMP'
     class algorithm(IGRISCCfgPPO.algorithm):
@@ -98,11 +71,5 @@ class IGRISCAMPCfgPPO(IGRISCCfgPPO):
         amp_reward_coef = 3.0 * (IGRISCAMPCfg.sim.dt * IGRISCAMPCfg.control.decimation)
         amp_motion_files = IGRISCAMPCfg.env.amp_motion_files
         amp_num_preload_transitions = IGRISCAMPCfg.env.amp_num_preload_transitions
-        amp_task_reward_lerp = .3
+        amp_task_reward_lerp = .8
         amp_discr_hidden_dims = [128,]
-
-        LOG_WANDB = True
-        env_name = 'igris_c_AMP'
-        file_name = 'igris_c_AMP'
-        config_name = 'igris_c_AMP'
-        wandb_name = 'igris_c'
