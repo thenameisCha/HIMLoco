@@ -134,7 +134,7 @@ class LeggedRobotCfg(BaseConfig):
         payload_mass_range = [-2, 4]
 
         randomize_com_displacement = True
-        com_displacement_range = [-0.05, 0.05]
+        com_displacement_range = [-0.03, 0.03]
 
         randomize_link_mass = True
         link_mass_range = [0.9, 1.1]
@@ -164,7 +164,7 @@ class LeggedRobotCfg(BaseConfig):
 
         # Randomizing these properties for each env reset leads to too slow training
         randomize_friction = True
-        friction_range = [0.2, 2.25]
+        friction_range = [0.2, 1.25]
         randomize_restitution = True
         restitution_range = [0., 1.0]
         randomize_damping = True
