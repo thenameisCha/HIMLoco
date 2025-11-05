@@ -5,6 +5,9 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.igris_c.igris_c import IGRISC
 from legged_gym.envs.igris_c.igris_c_AMP_config import IGRISCAMPCfg
 from rsl_rl.datasets.motion_loader import AMPLoader
+from isaacgym.torch_utils import *
+from isaacgym import gymtorch, gymapi, gymutil
+from rsl_rl.modules.normalizer import Normalizer_obs
 
 class IGRISCAMP(IGRISC):
     def __init__(self, cfg: IGRISCAMPCfg, sim_params, physics_engine, sim_device, headless):
@@ -23,17 +26,14 @@ class IGRISCAMP(IGRISC):
                 )
             else:
                 self.amp_loader = None
+        self.amp_normalizer = Normalizer_obs(self.amp_loader.observation_dim)
             
     def compute_termination_observations(self, env_ids):
         """ Computes observations
         """
-        termination_privileged_obs_buf, mirror_termination_privileged_obs_buf = super().compute_termination_observations(env_ids)
+        extras = super().compute_termination_observations(env_ids)
         termination_amp_state = self.get_amp_observations()[env_ids]
-        extras = {
-            'termination_privileged_obs_buf': termination_privileged_obs_buf,
-            'mirror_termination_privileged_obs_buf': mirror_termination_privileged_obs_buf,
-            'termination_amp_state': termination_amp_state
-        }
+        extras['termination_amp_obs'] = termination_amp_state
         return extras
     
     def get_amp_observations(self):
@@ -41,8 +41,9 @@ class IGRISCAMP(IGRISC):
         ret = []            
         for _, val in dic.items():
             ret.append(val)
-        return torch.hstack(ret)
-
+        ret = torch.hstack(ret)
+        return self.amp_normalizer(ret)
+    
     def get_amp_data_dict(self):
         # For data collection
         kb_pos = torch.zeros((self.num_envs, 13, 3), device=self.device)
@@ -59,7 +60,6 @@ class IGRISCAMP(IGRISC):
             'root_angvel': self.root_states[:, 10:13],
             'kb_pos': kb_pos,
         }
-
 
     #------------- Callbacks --------------
     def _reset_states(self, env_ids):
@@ -89,12 +89,9 @@ class IGRISCAMP(IGRISC):
             frames: AMP frames to initialize motion with
         """
         env_ids_amp = env_ids[amp_mask]
-        self.dof_pos[env_ids] = self.default_dof_pos_cfg[:]
-        self.dof_pos[env_ids,  self.action_offset:self.action_offset+self.num_actions] = self.default_dof_pos_cfg[:,  self.action_offset:self.action_offset+self.num_actions].repeat(len(env_ids), 1) * torch_rand_float(0.8, 1.2, (len(env_ids), self.num_actions), device=self.device)
-        # self.dof_pos[env_ids, :self.num_actions] = self.default_dof_pos_cfg[:, :self.num_actions].repeat(len(env_ids), 1) + torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_actions), device=self.device)
+        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
         self.dof_vel[env_ids] = 0.
         self.dof_pos[env_ids_amp,  self.action_offset:self.action_offset+self.cfg.env.num_waist+self.cfg.env.num_lower_actions] = AMPLoader.get_joint_pose_batch(frames)
-        # self.dof_vel[env_ids] = AMPLoader.get_joint_vel_batch(frames)
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
@@ -110,37 +107,24 @@ class IGRISCAMP(IGRISC):
         # base position
         if self.custom_origins:
             self.root_states[env_ids] = self.base_init_state
-            self.root_states[env_ids, :2] += self.env_origins[env_ids, :2]
-            self.root_states[env_ids, :2] += torch_rand_float(-2., 2., (len(env_ids), 2), device=self.device) # xy position within 1m of the center
-            self.root_states[env_ids, 2] = self.base_init_state[2] + self._get_heights()[env_ids].amax(dim=-1)
-            self.custom_env_origins[env_ids] = self.root_states[env_ids, :3]
+            self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, :2] += torch_rand_float(-1., 1., (len(env_ids), 2), device=self.device) # xy position within 1m of the center
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
-            self.custom_env_origins[env_ids] = self.root_states[env_ids, :3]
-        self.root_states[env_ids, 7:13] = torch_rand_float(-0.1, 0.1, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
-
-        # self.root_states[env_ids, 2] = AMPLoader.get_root_pos_batch(frames)
-
-        random_yaw_angle = (2*torch.rand((env_ids.shape[0],1), device=self.device)-1)*torch.pi
-        quat = quat_from_euler_xyz(torch.zeros_like(random_yaw_angle.squeeze()), torch.zeros_like(random_yaw_angle.squeeze()), random_yaw_angle.squeeze())
-        self.root_states[env_ids, 3:7] = quat
+        # base velocities
+        self.root_states[env_ids, 7:13] = torch_rand_float(-0.3, 0.3, (len(env_ids), 6), device=self.device) # [7:10]: lin vel, [10:13]: ang vel
         projected_gravity = AMPLoader.get_root_rot_batch(frames) # roll pitch
         if projected_gravity is not None:
             gx, gy, gz = projected_gravity.unbind(-1)
             roll  = torch.atan2(-gy, -gz)                           # rotation about body-X
             pitch = torch.atan2(gx, torch.sqrt(gy * gy + gz * gz))                 
-            quat_amp = quat_from_euler_xyz(roll, pitch, random_yaw_angle[amp_mask].squeeze())
+            quat_amp = quat_from_euler_xyz(roll, pitch, torch.zeros_like(roll))
             self.root_states[env_ids[amp_mask], 3:7] = quat_amp
-        # self.root_states[env_ids, 7:10] = AMPLoader.get_linear_vel_batch(frames)
-        # self.root_states[env_ids, 10:13] = AMPLoader.get_angular_vel_batch(frames)
-        self.last_root_pos[env_ids] = self.root_states[env_ids, :3]
-        self.last_root_vel[env_ids] = self.root_states[env_ids, 7:13]
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
-
 
     #----------------------------------------
     def _get_amp_observations_dict(self):

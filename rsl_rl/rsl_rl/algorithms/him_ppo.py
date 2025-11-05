@@ -33,7 +33,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from rsl_rl.modules import HIMActorCritic
-from rsl_rl.storage import HIMRolloutStorage
+from rsl_rl.storage import RolloutStorage, HIMRolloutStorage
+from rsl_rl.storage.replay_buffer import ReplayBuffer
 
 class HIMPPO:
     actor_critic: HIMActorCritic
@@ -52,6 +53,7 @@ class HIMPPO:
                  schedule="fixed",
                  desired_kl=0.01,
                  device='cpu',
+                 min_std=None,
                  LCP_cfg: dict = {'use_LCP': False},
                  symmetry_cfg: dict = {'enforce_symmetry': False,},
                  ):
@@ -73,6 +75,7 @@ class HIMPPO:
         self.storage = None # initialized later
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
         self.transition = HIMRolloutStorage.Transition()
+        self.min_std = min_std
 
         # PPO parameters
         self.clip_param = clip_param
@@ -206,6 +209,9 @@ class HIMPPO:
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                if not self.actor_critic.fixed_std and self.min_std is not None:
+                    self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
+
 
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
@@ -243,7 +249,7 @@ class HIMPPO:
         gradient_penalty_loss = torch.sum(torch.square(grad_log_prob_obs), dim=-1).mean()            
 
         return gradient_penalty_loss
-    
+        
     def mirror_actions(self, actions: torch.Tensor):
         target_mirrored_action_mean = actions.detach().clone()
         with torch.no_grad():
@@ -284,3 +290,195 @@ class HIMPPO:
 
         return target_mirrored_action_mean
     
+class HIMPPO_AMP( HIMPPO ):
+    def __init__(self, actor_critic, num_learning_epochs=1, num_mini_batches=1, clip_param=0.2, gamma=0.998, lam=0.95, value_loss_coef=1, entropy_coef=0, learning_rate=0.001, max_grad_norm=1, use_clipped_value_loss=True, schedule="fixed", desired_kl=0.01, device='cpu', min_std=None, LCP_cfg = { 'use_LCP': False }, symmetry_cfg = { 'enforce_symmetry': False },
+                discriminator=None,
+                amp_data=None,
+                disc_grad_pen=1.,
+                amp_replay_buffer_size=100000,
+                disc_coef=5.,
+
+):
+        super().__init__(actor_critic, num_learning_epochs, num_mini_batches, clip_param, gamma, lam, value_loss_coef, entropy_coef, learning_rate, max_grad_norm, use_clipped_value_loss, schedule, desired_kl, device, min_std, LCP_cfg, symmetry_cfg)
+        # Discriminator components
+        self.discriminator = discriminator
+        self.discriminator.to(self.device)
+        self.amp_transition = RolloutStorage.Transition()
+        self.amp_storage = ReplayBuffer(
+            discriminator.input_dim // 2, amp_replay_buffer_size, device)
+        self.amp_data = amp_data # AMPLoader
+        # Optimizer for policy and discriminator.
+        params = [
+            {'params': self.actor_critic.parameters(), 'name': 'actor_critic'},
+            {'params': self.discriminator.trunk.parameters(),
+             'weight_decay': 10e-4, 'name': 'amp_trunk'},
+            {'params': self.discriminator.amp_linear.parameters(),
+             'weight_decay': 10e-2, 'name': 'amp_head'}]
+
+        self.optimizer = optim.Adam(params, lr=learning_rate)
+        self.transition = RolloutStorage.Transition()      
+        self.disc_coef = disc_coef
+        self.disc_grad_pen = disc_grad_pen
+
+    def save_amp_obs(self, amp_obs):
+        self.amp_transition.observations = amp_obs
+
+    def store_amp_transition(self, next_amp_obs):
+        self.amp_storage.insert(self.amp_transition.observations, next_amp_obs) 
+        self.amp_transition.clear()
+
+    def update(self):
+        mean_value_loss = 0
+        mean_surrogate_loss = 0
+        mean_estimation_loss = 0
+        mean_swap_loss = 0
+        mean_smooth_loss = 0
+        mean_amp_loss = 0
+        mean_grad_pen_loss = 0
+        mean_policy_pred = 0
+        mean_expert_pred = 0
+        
+        amp_policy_generator = self.amp_storage.feed_forward_generator(
+            self.num_learning_epochs * self.num_mini_batches,
+            self.storage.num_envs * self.storage.num_transitions_per_env //
+                self.num_mini_batches)
+        amp_expert_generator = self.amp_data.feed_forward_generator(
+            self.num_learning_epochs * self.num_mini_batches,
+            self.storage.num_envs * self.storage.num_transitions_per_env //
+                self.num_mini_batches)
+        generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+
+        for sample, sample_amp_policy, sample_amp_expert in \
+            zip(generator, amp_policy_generator, amp_expert_generator):
+                
+                obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
+                old_mu_batch, old_sigma_batch = sample
+                
+                if self.use_LCP:
+                    mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
+                    lcp_obs_batch = obs_batch.clone() # for LCP loss
+                    lcp_obs_batch.requires_grad_()
+                    mask = torch.zeros_like(lcp_obs_batch)
+                    mask[..., mask_idx] = 1
+                    eff_lcp_obs_batch = lcp_obs_batch*(1-mask) + lcp_obs_batch.detach()*mask
+                    # lcp_hidden_batch.requires_grad_()
+                    self.actor_critic.act(eff_lcp_obs_batch)
+                    actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                    gradient_penalty_loss = self._calc_grad_penalty(obs_batch=lcp_obs_batch, actions_log_prob_batch=actions_log_prob_batch)
+                    mean_smooth_loss += gradient_penalty_loss.item()
+                else:
+                    gradient_penalty_loss = 0.
+                    # GRAD PEN FOR SMOOTH MOTION from "Learning Smooth Humanoid Locomotion through Lipschitz-Constrained Policies"
+                    # gradient_penalty_loss = self._calc_grad_penalty_2(
+                    #     obs_batch    = lcp_obs_batch,
+                    #     hidden_batch = lcp_hidden_batch,
+                    #     log_prob     = actions_log_prob_batch
+                    # )
+
+                self.actor_critic.act(obs_batch)
+                actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                value_batch = self.actor_critic.evaluate(critic_obs_batch)
+                mu_batch = self.actor_critic.action_mean
+                sigma_batch = self.actor_critic.action_std
+                entropy_batch = self.actor_critic.entropy
+
+                # KL
+                if self.desired_kl != None and self.schedule == 'adaptive':
+                    with torch.inference_mode():
+                        kl = torch.sum(
+                            torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
+                        kl_mean = torch.mean(kl)
+
+                        if kl_mean > self.desired_kl * 2.0:
+                            self.learning_rate = max(1e-5, self.learning_rate / 1.5)
+                        elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
+                            self.learning_rate = min(1e-2, self.learning_rate * 1.5)
+                        
+                        for param_group in self.optimizer.param_groups:
+                            param_group['lr'] = self.learning_rate
+
+                #Estimator Update
+                estimation_loss, swap_loss = self.actor_critic.estimator.update(obs_batch, next_critic_obs_batch, lr=self.learning_rate)
+
+                # Surrogate loss
+                ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
+                surrogate = -torch.squeeze(advantages_batch) * ratio
+                surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
+                                                                                1.0 + self.clip_param)
+                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
+
+                # Value function loss
+                if self.use_clipped_value_loss:
+                    value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(-self.clip_param,
+                                                                                                    self.clip_param)
+                    value_losses = (value_batch - returns_batch).pow(2)
+                    value_losses_clipped = (value_clipped - returns_batch).pow(2)
+                    value_loss = torch.max(value_losses, value_losses_clipped).mean()
+                else:
+                    value_loss = (returns_batch - value_batch).pow(2).mean()
+
+                # Discriminator loss.
+                policy_state, policy_next_state = sample_amp_policy
+                expert_state, expert_next_state = sample_amp_expert
+
+                policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+                expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+
+                # LSGAN
+                expert_loss = torch.nn.MSELoss()(
+                    expert_d, torch.ones(expert_d.size(), device=self.device))
+                policy_loss = torch.nn.MSELoss()(
+                    policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
+                amp_loss = (expert_loss + policy_loss) *0.5
+                grad_pen_loss = self.discriminator.compute_grad_pen( 
+                    *sample_amp_expert, lambda_=self.disc_grad_pen) 
+                
+                # logit reg
+                logit_weights = torch.flatten(self.discriminator.amp_linear.weight)
+                disc_logit_loss = 0.05*torch.sum(torch.square(logit_weights))
+
+                loss = (
+                    surrogate_loss + 
+                    self.value_loss_coef * value_loss - 
+                    self.entropy_coef * entropy_batch.mean() +
+                    self.smooth_coef * gradient_penalty_loss + 
+                    self.disc_coef*(amp_loss + grad_pen_loss + disc_logit_loss)
+                    )
+
+                # Gradient step
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+                self.optimizer.step()
+                if not self.actor_critic.fixed_std and self.min_std is not None:
+                    self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
+
+                mean_value_loss += value_loss.item()
+                mean_surrogate_loss += surrogate_loss.item()
+                mean_estimation_loss += estimation_loss
+                mean_swap_loss += swap_loss
+                mean_amp_loss += amp_loss.item()
+                mean_grad_pen_loss += grad_pen_loss.item()
+                mean_policy_pred += policy_d.mean().item()
+                mean_expert_pred += expert_d.mean().item()
+
+        num_updates = self.num_learning_epochs * self.num_mini_batches
+        mean_value_loss /= num_updates
+        mean_surrogate_loss /= num_updates
+        mean_estimation_loss /= num_updates
+        mean_swap_loss /= num_updates
+        mean_smooth_loss /= num_updates
+        mean_amp_loss /= num_updates
+        mean_policy_pred /= num_updates
+        mean_expert_pred /= num_updates
+        self.storage.clear()
+        loss_dict = {
+            "value_function": mean_value_loss,
+            "surrogate": mean_surrogate_loss,
+            "estimation loss": estimation_loss,
+            "swap loss": swap_loss,
+            "mean smooth loss": mean_smooth_loss,
+            "mean_policy_pred": mean_policy_pred,
+            "mean_expert_pred": mean_expert_pred,
+        }
+        return loss_dict

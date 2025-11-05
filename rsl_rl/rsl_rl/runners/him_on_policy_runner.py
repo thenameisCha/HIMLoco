@@ -36,11 +36,12 @@ import statistics
 from torch.utils.tensorboard import SummaryWriter
 import torch
 
-from rsl_rl.algorithms import PPO, HIMPPO
+from rsl_rl.algorithms import PPO, HIMPPO, HIMPPO_AMP
 from rsl_rl.modules import HIMActorCritic
 from rsl_rl.env import VecEnv
 import wandb
-
+from rsl_rl.algorithms.amp_discriminator import AMPDiscriminator
+from rsl_rl.datasets.motion_loader import AMPLoader
 
 class HIMOnPolicyRunner:
 
@@ -67,8 +68,7 @@ class HIMOnPolicyRunner:
                                                         self.env.num_one_step_obs,
                                                         self.env.num_actions,
                                                         **self.policy_cfg).to(self.device)
-        alg_class = eval(self.cfg["algorithm_class_name"]) # HIMPPO
-        self.alg: HIMPPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
+        self.init_alg(actor_critic)
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
 
@@ -86,12 +86,15 @@ class HIMOnPolicyRunner:
 
         _, _ = self.env.reset()
     
+    def init_alg(self, actor_critic):
+        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
+        min_std = torch.tensor(self.cfg["min_normalized_std"], device=self.device)
+        self.alg: PPO = alg_class(actor_critic, device=self.device, min_std=min_std, **self.alg_cfg) # encoder 
 
     def init_wandb(self, train_cfg):
         # WANDB INIT
         if self.LOG_WANDB:
             wandb.init(project=train_cfg['runner']['wandb_name'])
-
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
@@ -104,6 +107,7 @@ class HIMOnPolicyRunner:
         critic_obs = privileged_obs if privileged_obs is not None else obs
         obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
         self.alg.actor_critic.train() # switch to train mode (for dropout for example)
+        self.env.normalizer_obs.train()
 
         ep_infos = []
         rewbuffer = deque(maxlen=100)
@@ -247,6 +251,7 @@ class HIMOnPolicyRunner:
             'model_state_dict': self.alg.actor_critic.state_dict(),
             'optimizer_state_dict': self.alg.optimizer.state_dict(),
             'estimator_optimizer_state_dict': self.alg.actor_critic.estimator.optimizer.state_dict(),
+            'obs_normalizer_state_dict': self.env.normalizer_obs.state_dict(),
             'iter': self.current_learning_iteration,
             'infos': infos,
             }, path)
@@ -254,6 +259,7 @@ class HIMOnPolicyRunner:
     def load(self, path, load_optimizer=True):
         loaded_dict = torch.load(path)
         self.alg.actor_critic.load_state_dict(loaded_dict['model_state_dict'])
+        self.env.normalizer_obs.load_state_dict(loaded_dict['obs_normalizer_state_dict'])
         if load_optimizer:
             self.alg.optimizer.load_state_dict(loaded_dict['optimizer_state_dict'])
             self.alg.actor_critic.estimator.optimizer.load_state_dict(loaded_dict['estimator_optimizer_state_dict'])
@@ -266,6 +272,12 @@ class HIMOnPolicyRunner:
             self.alg.actor_critic.to(device)
         return self.alg.actor_critic.act_inference
 
+    def get_inference_normalizer(self, device=None):
+        self.env.normalizer_obs.eval() # switch to evaluation mode (dropout for example)
+        if device is not None:
+            self.env.normalizer_obs.to(device)
+        return self.env.normalizer_obs
+    
     def log_wandb(self, locs):
         if self.LOG_WANDB:
             wandb_dict = dict()
@@ -297,3 +309,125 @@ class HIMOnPolicyRunner:
             artifact.add_file(model_path)
             wandb.run.log_artifact(artifact)
             wandb.run.finish()
+
+class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
+    def init_alg(self, actor_critic):
+        alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
+        min_std = torch.tensor(self.cfg["min_normalized_std"], device=self.device)
+        amp_motion_dict = self.cfg.get("amp_motion_files", {})
+        if len(amp_motion_dict) == 0:
+            raise ValueError("AMP training requires env.amp_motion_files to contain at least one motion clip.")
+
+        amp_data = AMPLoader(
+            self.device,
+            time_between_frames=self.env.dt,
+            preload_transitions=self.cfg.get("amp_preload_transitions", True),
+            num_preload_transitions=self.cfg.get("amp_num_preload_transitions", 10000),
+            reference_dict=amp_motion_dict
+        )
+        discr_hidden_dims = self.cfg.get("amp_discr_hidden_dims", [256, 256])
+        amp_reward_coef = self.cfg.get("amp_reward_coef", 3.0)
+        task_reward_lerp = self.cfg.get("amp_task_reward_lerp", 0.3)
+        discriminator = AMPDiscriminator(
+            amp_data.observation_dim * 2,
+            amp_reward_coef,
+            discr_hidden_dims,
+            self.device,
+            task_reward_lerp
+        ).to(self.device)
+
+        self.alg: HIMPPO_AMP = alg_class(
+            actor_critic,
+            discriminator=discriminator,
+            amp_data=amp_data,
+            device=self.device,
+            min_std=min_std,
+            **self.alg_cfg
+        )
+
+    def load(self, path, load_optimizer = True):
+        ret = super().load(path, load_optimizer)
+        loaded_dict = torch.load(path, weights_only=False)
+        self.alg.discriminator.load_state_dict(loaded_dict['discriminator_state_dict'])
+        return ret
+
+    def learn(self, num_learning_iterations, init_at_random_ep_len=False):
+        # initialize writer
+        if self.log_dir is not None and self.writer is None:
+            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        if init_at_random_ep_len:
+            self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
+        obs = self.env.get_observations()
+        privileged_obs = self.env.get_privileged_observations()
+        amp_obs = self.env.get_amp_observations()
+        critic_obs = privileged_obs if privileged_obs is not None else obs
+        obs, critic_obs, amp_obs = obs.to(self.device), critic_obs.to(self.device), amp_obs.to(self.device)
+        self.alg.actor_critic.train() # switch to train mode (for dropout for example)
+        self.alg.discriminator.train()
+
+        ep_infos = []
+        rewbuffer = deque(maxlen=100)
+        lenbuffer = deque(maxlen=100)
+        amprewbuffer = deque(maxlen=100)
+        cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+        cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+
+        tot_iter = self.current_learning_iteration + num_learning_iterations
+        for it in range(self.current_learning_iteration, tot_iter):
+            start = time.time()
+            # Rollout
+            with torch.inference_mode():
+                for i in range(self.num_steps_per_env):
+                    actions = self.alg.act(obs, critic_obs)
+                    self.alg.save_amp_obs(amp_obs)
+                    obs, privileged_obs, rewards, dones, infos, termination_ids, extras = self.env.step(actions)
+                    critic_obs = privileged_obs if privileged_obs is not None else obs
+                    next_amp_obs = self.env.get_amp_observations()
+                    obs, critic_obs, next_amp_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), next_amp_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    termination_ids = termination_ids.to(self.device)
+                    termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
+                    termination_amp_obs = extras['termination_amp_obs'].to(self.device)
+
+                    next_critic_obs = critic_obs.clone().detach()
+                    next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    next_amp_obs_with_term = next_amp_obs.clone().detach()
+                    next_amp_obs_with_term[termination_ids] = termination_amp_obs
+
+                    rewards, amp_rewards, _ = self.alg.discriminator.predict_amp_reward(
+                        amp_obs, next_amp_obs_with_term, rewards)
+                    amp_obs = next_amp_obs.clone()
+                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
+                    self.alg.store_amp_transition(next_amp_obs_with_term)
+                
+                    if self.log_dir is not None:
+                        # Book keeping
+                        if 'episode' in infos:
+                            ep_infos.append(infos['episode'])
+                        cur_reward_sum += rewards
+                        cur_episode_length += 1
+                        new_ids = (dones > 0).nonzero(as_tuple=False)
+                        rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                        lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
+                        amprewbuffer.extend(amp_rewards.cpu().numpy().tolist())
+                        cur_reward_sum[new_ids] = 0
+                        cur_episode_length[new_ids] = 0
+
+                stop = time.time()
+                collection_time = stop - start
+
+                # Learning step
+                start = stop
+                self.alg.compute_returns(critic_obs)
+                
+            loss_dict = self.alg.update()
+            stop = time.time()
+            learn_time = stop - start
+            if self.log_dir is not None:
+                self.log(locals())
+            if it % self.save_interval == 0:
+                self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+            if it%10 == 0:
+                self.log_wandb(locals())
+            ep_infos.clear()
+        self.current_learning_iteration += num_learning_iterations
+        self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))

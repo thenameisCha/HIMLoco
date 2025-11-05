@@ -36,6 +36,8 @@ from legged_gym.envs.go1.go1_config import Go1RoughCfg, Go1RoughCfgPPO
 from legged_gym.envs.aliengo.aliengo_config import AlienGoRoughCfg, AlienGoRoughCfgPPO
 from legged_gym.envs.igris_c.igris_c import IGRISC
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg, IGRISCCfgPPO
+from legged_gym.envs.igris_c.igris_c_AMP import IGRISCAMP
+from legged_gym.envs.igris_c.igris_c_AMP_config import IGRISCAMPCfg, IGRISCAMPCfgPPO
 
 
 import os
@@ -46,3 +48,4 @@ task_registry.register( "a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO() )
 task_registry.register( "go1", LeggedRobot, Go1RoughCfg(), Go1RoughCfgPPO() )
 task_registry.register( "aliengo", LeggedRobot, AlienGoRoughCfg(), AlienGoRoughCfgPPO() )
 task_registry.register( "igris_c", IGRISC, IGRISCCfg(), IGRISCCfgPPO())
+task_registry.register( "igris_c_amp", IGRISCAMP, IGRISCAMPCfg(), IGRISCAMPCfgPPO())

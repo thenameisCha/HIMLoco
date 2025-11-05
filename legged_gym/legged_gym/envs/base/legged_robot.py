@@ -47,6 +47,7 @@ from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
+from rsl_rl.modules.normalizer import Normalizer_obs
 import time
 
 class LeggedRobot(BaseTask):
@@ -78,6 +79,7 @@ class LeggedRobot(BaseTask):
         self.num_one_step_obs = self.cfg.env.num_one_step_observations
         self.num_one_step_privileged_obs = self.cfg.env.num_one_step_privileged_obs
         self.history_length = int(self.num_obs / self.num_one_step_obs)
+        self.normalizer_obs = Normalizer_obs(self.num_one_step_privileged_obs)
 
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
@@ -159,7 +161,7 @@ class LeggedRobot(BaseTask):
         self.check_termination()
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
-        termination_privileged_obs, mirror_termination_privileged_obs = self.compute_termination_observations(env_ids)
+        extras = self.compute_termination_observations(env_ids)
         self.reset_idx(env_ids)
         self._post_physics_step_callback2() # update phase indicators, raibert footholds, and link states
         self.compute_observations() # in some cases a simulation step might be required to refresh some obs (for example body positions)
@@ -178,11 +180,6 @@ class LeggedRobot(BaseTask):
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
 
-        extras = {
-            'termination_privileged_obs': termination_privileged_obs,
-            'mirror_termination_privileged_obs': mirror_termination_privileged_obs
-        }
-
         return env_ids, extras
 
     def check_termination(self):
@@ -191,11 +188,11 @@ class LeggedRobot(BaseTask):
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
-        dof_reset_buf = torch.any(
-            (self.dof_pos < self.dof_pos_limits[..., 0]) \
-                | (self.dof_pos > self.dof_pos_limits[..., 1])
-                , dim=-1)
-        self.reset_buf |= dof_reset_buf
+        # dof_reset_buf = torch.any(
+        #     (self.dof_pos < self.dof_pos_limits[..., 0]) \
+        #         | (self.dof_pos > self.dof_pos_limits[..., 1])
+        #         , dim=-1)
+        # self.reset_buf |= dof_reset_buf
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -288,6 +285,7 @@ class LeggedRobot(BaseTask):
         """ Computes observations
         """
         current_obs, mirror_current_obs = self.get_current_obs()
+        current_obs, mirror_current_obs = self.normalizer_obs(current_obs), self.normalizer_obs(mirror_current_obs)
 
         self.obs_buf = torch.cat((current_obs[:, :self.num_one_step_obs], self.obs_buf[:, :-self.num_one_step_obs]), dim=-1)
         self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_one_step_privileged_obs], self.privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)
@@ -322,9 +320,13 @@ class LeggedRobot(BaseTask):
         """ Computes observations
         """
         current_obs, mirror_current_obs = self.get_current_obs()
-
-        return torch.cat((current_obs[:, :self.num_one_step_privileged_obs], self.privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)[env_ids],\
-        torch.cat((mirror_current_obs[:, :self.num_one_step_privileged_obs], self.mirror_privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)[env_ids]
+        termination_privileged_obs_buf = torch.cat((current_obs[:, :self.num_one_step_privileged_obs], self.privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)[env_ids]
+        mirror_termination_privileged_obs_buf = torch.cat((mirror_current_obs[:, :self.num_one_step_privileged_obs], self.mirror_privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)[env_ids]
+        extras = {
+            'termination_privileged_obs': termination_privileged_obs_buf,
+            'mirror_termination_privileged_obs': mirror_termination_privileged_obs_buf,
+        }
+        return extras
 
     def _mirror_observations(self, obs):
         raise NotImplementedError
@@ -353,6 +355,11 @@ class LeggedRobot(BaseTask):
         cam_pos = gymapi.Vec3(position[0], position[1], position[2])
         cam_target = gymapi.Vec3(lookat[0], lookat[1], lookat[2])
         self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
+        
+    def set_normalizer_eval(self):
+        if self.normalizer_obs is not None:
+            print("Set normalizer to eval mode")
+            self.normalizer_obs.eval()
 
     #------------- Callbacks --------------
     def _process_rigid_shape_props(self, props, env_id):
@@ -441,7 +448,7 @@ class LeggedRobot(BaseTask):
                 r = self.dof_pos_limits[:, i, 1] - self.dof_pos_limits[:, i, 0]
                 self.dof_pos_limits[:, i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_pos_limits[:, i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-            self.hard_dof_pos_limits = self.dof_pos_limits.clone()
+            self.hard_dof_pos_limits = self.dof_pos_limits.clone() # For actual joint limit computation
             self.default_armature = torch.tensor(self.cfg.asset.armature, device=self.device).unsqueeze(dim=0)
             self.default_damping = torch.tensor(self.cfg.asset.damping, device=self.device).unsqueeze(dim=0)
             props['armature'] = self.cfg.asset.armature

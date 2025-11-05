@@ -43,6 +43,7 @@ class ActorCritic(nn.Module):
                         actor_hidden_dims=[256, 256, 256],
                         critic_hidden_dims=[256, 256, 256],
                         activation='elu',
+                        fixed_std=False,
                         init_noise_std=1.0,
                         **kwargs):
         if kwargs:
@@ -50,6 +51,7 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         activation = get_activation(activation)
+        self.fixed_std = fixed_std
 
         mlp_input_dim_a = num_actor_obs
         mlp_input_dim_c = num_critic_obs

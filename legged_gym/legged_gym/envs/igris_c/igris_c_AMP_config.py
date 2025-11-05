@@ -6,11 +6,53 @@ class IGRISCAMPCfg( IGRISCCfg ):
         reference_state_initialization = True
         reference_state_initialization_prob = .8
         amp_motion_files = {
-            # "path/to/pkl": {
-            #     "hz": motion_hz,
-            #     "start_time": clip_motion_start [s],
-            #     "end_time": clip_motion_end [s],
-            #     "weight": motion_weight
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/walk_slow_woohyun_phc 1.pkl": {
+                "hz": 30,
+                "start_time": 95./50.,
+                "end_time": 140./50.,
+                "weight": 1.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/walk_slow2.pkl": {
+                "hz": 30,
+                "start_time": 125./30.,
+                "end_time": 163./30.,
+                "weight": 1.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/Female1Walking_c3d_0-B3_-_walk1_poses.pkl": {
+                "hz": 30,
+                "start_time": 29./30.,
+                "end_time": 65./30.,
+                "weight": 1.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/Female1Walking_c3d_0-B1_-_stand_to_walk_poses.pkl": {
+                "hz": 30,
+                "start_time": 1./30.,
+                "end_time": 35./30.,
+                "weight": 3.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/turn_1_woohyun_phc 1.pkl": {
+                "hz": 30,
+                "start_time": 125./30.,
+                "end_time": 170./30.,
+                "weight": 1.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/turn_1_woohyun_phc 1.pkl": {
+                "hz": 30,
+                "start_time": 30./30.,
+                "end_time": 75./30.,
+                "weight": 1.0
+            },
+            # "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
+            #     "hz": 30,
+            #     "start_time": 150./30.,
+            #     "end_time": 180./30.,
+            #     "weight": 1.0
+            # },
+            # "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
+            #     "hz": 30,
+            #     "start_time": 57./30.,
+            #     "end_time": 99./30.,
+            #     "weight": 1.0
             # },
         }
         amp_preload_transitions = True
@@ -35,4 +77,4 @@ class IGRISCAMPCfgPPO(IGRISCCfgPPO):
         env_name = 'igris_c_AMP'
         file_name = 'igris_c_AMP'
         config_name = 'igris_c_AMP'
-        wandb_name = 'igris_c_AMP'
+        wandb_name = 'igris_c'

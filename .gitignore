@@ -62,3 +62,4 @@ __pycache__
 #wandb
 wandb
 *.wandb
+legged_gym/resources/robots/igris/urdf_old/MUJOCO_LOG.TXT

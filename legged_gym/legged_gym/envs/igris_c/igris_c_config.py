@@ -258,6 +258,7 @@ class IGRISCCfg( LeggedRobotCfg ):
             swing_push = 2.0
             swing_ori = 1.0
             feet_sliding = -1.e-2
+            dof_pos_limits = -100.
             
 
     class commands(LeggedRobotCfg.commands):
@@ -287,7 +288,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
             'symmetry_coef' : 50,
             'num_waist' : 2,
             'num_legs' : 12,
-            'num_arms' : 8,
+            'num_arms' : 0,
         }
     
     class runner(LeggedRobotCfgPPO.runner):

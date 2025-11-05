@@ -88,13 +88,9 @@ class AMPLeggedRobot(LeggedRobot):
     def compute_termination_observations(self, env_ids):
         """ Computes observations
         """
-        termination_privileged_obs_buf, mirror_termination_privileged_obs_buf = super().compute_termination_observations(env_ids)
+        extras = super().compute_termination_observations(env_ids)
         termination_amp_state = self.get_amp_observations()[env_ids]
-        extras = {
-            'termination_privileged_obs_buf': termination_privileged_obs_buf,
-            'mirror_termination_privileged_obs_buf': mirror_termination_privileged_obs_buf,
-            'termination_amp_state': termination_amp_state
-        }
+        extras['termination_amp_obs'] = termination_amp_state
         return extras
     
     def get_amp_observations(self):

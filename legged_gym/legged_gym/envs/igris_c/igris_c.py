@@ -195,10 +195,12 @@ class IGRISC(LeggedRobot):
                 zero = pitch.new_zeros((B,))
                 lo = torch.where(oob, zero, lo)
                 hi = torch.where(oob, zero, hi)
+                m = (hi + lo) / 2
+                r = (hi - lo)
 
                 # Write back
-                self.dof_pos_limits[:, roll_id, 0] = lo
-                self.dof_pos_limits[:, roll_id, 1] = hi
+                self.dof_pos_limits[:, roll_id, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
+                self.dof_pos_limits[:, roll_id, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
 
             compute_side(w_roll, w_pitch)
 
@@ -267,10 +269,12 @@ class IGRISC(LeggedRobot):
             zero = pitch.new_zeros((B,))
             lo = torch.where(oob, zero, lo)
             hi = torch.where(oob, zero, hi)
+            m = (hi + lo) / 2
+            r = (hi - lo)
 
             # Write back
-            self.dof_pos_limits[:, roll_id, 0] = lo
-            self.dof_pos_limits[:, roll_id, 1] = hi
+            self.dof_pos_limits[:, roll_id, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
+            self.dof_pos_limits[:, roll_id, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
 
         compute_side(L_roll, L_pitch)
         compute_side(R_roll, R_pitch)
@@ -409,3 +413,9 @@ class IGRISC(LeggedRobot):
     
     def _reward_feet_sliding(self):
         return torch.sum(self.rb_states[:, self.feet_indices, 7:9].norm(dim=-1)*(self.contact_forces[:, self.feet_indices, 2] > 1.).float(), dim=-1)
+    
+    def _reward_dof_pos_limits(self):
+        # Penalize dof positions too close to the limit
+        out_of_limits = (self.dof_pos < self.dof_pos_limits[..., 0]) # lower limit
+        out_of_limits |= (self.dof_pos > self.dof_pos_limits[..., 1])
+        return torch.sum(out_of_limits, dim=1)

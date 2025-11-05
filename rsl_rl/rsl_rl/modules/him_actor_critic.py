@@ -80,6 +80,7 @@ class HIMActorCritic(nn.Module):
                         actor_hidden_dims=[512, 256, 128],
                         critic_hidden_dims=[512, 256, 128],
                         activation='elu',
+                        fixed_std=False,
                         init_noise_std=1.0,
                         **kwargs):
         if kwargs:
@@ -87,6 +88,7 @@ class HIMActorCritic(nn.Module):
         super(HIMActorCritic, self).__init__()
 
         activation = get_activation(activation)
+        self.fixed_std = fixed_std
 
         self.history_size = int(num_actor_obs/num_one_step_obs)
         self.num_actor_obs = num_actor_obs
