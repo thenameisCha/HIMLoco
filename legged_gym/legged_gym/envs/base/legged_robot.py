@@ -188,11 +188,11 @@ class LeggedRobot(BaseTask):
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
-        dof_reset_buf = torch.any(
-            (self.dof_pos < self.dof_pos_limits[..., 0]) \
-                | (self.dof_pos > self.dof_pos_limits[..., 1])
-                , dim=-1)
-        self.reset_buf |= dof_reset_buf
+        # dof_reset_buf = torch.any(
+        #     (self.dof_pos < self.dof_pos_limits[..., 0]) \
+        #         | (self.dof_pos > self.dof_pos_limits[..., 1])
+        #         , dim=-1)
+        # self.reset_buf |= dof_reset_buf
 
     def reset_idx(self, env_ids):
         """ Reset some environments.
@@ -228,6 +228,7 @@ class LeggedRobot(BaseTask):
         self.last_contact_forces[env_ids] = 0.
         self.last_feet_states[env_ids] = torch.zeros_like(self.rb_states[env_ids][:, self.feet_indices])
         self.feet_air_time[env_ids] = 0.
+        self.feet_contact_time[env_ids] = 0.
         self.reset_buf[env_ids] = 1
 
         # update height measurements
@@ -740,6 +741,7 @@ class LeggedRobot(BaseTask):
         self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float, device=self.device, requires_grad=False) # x vel, y vel, yaw vel, heading
         self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel], device=self.device, requires_grad=False,) # TODO change this
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False)
+        self.feet_contact_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float, device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
@@ -1442,9 +1444,11 @@ class LeggedRobot(BaseTask):
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.) * contact_filt
         self.feet_air_time += self.dt
+        self.feet_contact_time += self.dt
         rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1) # reward only on first contact with the ground
         rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
+        self.feet_contact_time *= torch.logical_and(contact, self.last_contacts) 
         return rew_airTime
     
     def _reward_stumble(self):
