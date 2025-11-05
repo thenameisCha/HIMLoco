@@ -72,7 +72,7 @@ class IGRISCAMPCfg( IGRISCCfg ):
             dof_pos = 0.2
             penalize_contact_power = -1.e-2
             slow_touchdown = -0.2
-            torque = -5.e-6
+            torques = -5.e-6
             swing_push = 4.
             swing_ori = 2.
 
