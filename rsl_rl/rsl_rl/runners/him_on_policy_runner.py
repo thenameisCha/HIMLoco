@@ -445,7 +445,6 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
             for key, val in locs['loss_dict'].items():
                 wandb_dict['Loss/'+key] = val
             wandb_dict['Loss/learning_rate'] = self.alg.learning_rate
-            wandb_dict['perturbation_flag'] = 1. if self.env.start_perturb and self.env.cfg.domain_rand.push_robots else 0
             wandb_dict["Policy/mean_noise_std"] = self.alg.actor_critic.std.mean()
             if locs['ep_infos']:
                 for key in locs['ep_infos'][0]:
