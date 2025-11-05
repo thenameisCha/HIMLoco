@@ -3,9 +3,9 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class IGRISCCfg( LeggedRobotCfg ):
     class env(LeggedRobotCfg.env):
-        num_one_step_observations = 53
+        num_one_step_observations = 51
         num_observations = num_one_step_observations * 6
-        num_one_step_privileged_obs = 53 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
+        num_one_step_privileged_obs = 51 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 14
         num_waist = 2 # How many waist joints are in the action
@@ -146,7 +146,7 @@ class IGRISCCfg( LeggedRobotCfg ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/igris/xml/igris_c_v2_waist.xml' 
         name = "igris"
         foot_name = "Ankle_Roll"
-        terminate_after_contacts_on = ['Hip', 'base', 'Hand', 'Wrist', 'Knee']
+        terminate_after_contacts_on = ['Hip', 'base', 'Hand', 'Wrist']
         armature = [
                     # 0.0307, 
                     0.0614, # 0.0307 
