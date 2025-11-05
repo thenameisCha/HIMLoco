@@ -50,7 +50,7 @@ pip install "numpy==1.23.5"
 python -m pip install --upgrade "protobuf==3.19.6"
 echo "All done."
 echo "DONT FORGET TO CHANGE DIRECTORIES AND ON_POLICY_RUNNER WANDB.RUN_NAME!!!"
-echo "WHEN USING GIT IN VAST, ex) env -u LD_LIBRARY_PATH git pull origin nightly"
+echo "WHEN USING GIT IN VAST, ex) env -u LD_LIBRARY_PATH git pull origin main"
 echo "Run export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-} when lippython is not found"
 # WHEN USING GIT IN VAST
-# env -u LD_LIBRARY_PATH git pull origin nightly
+# env -u LD_LIBRARY_PATH git pull origin main
