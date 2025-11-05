@@ -30,6 +30,7 @@
 
 from .actor_critic import ActorCritic
 from .actor_critic_recurrent import ActorCriticRecurrent
+from .wmr_actor_critic import WMRActorCritic
 from .him_actor_critic import HIMActorCritic
 from .him_estimator import HIMEstimator
 from .normalizer import Normalizer_obs
