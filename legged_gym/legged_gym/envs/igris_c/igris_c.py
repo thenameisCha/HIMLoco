@@ -45,8 +45,8 @@ class IGRISC(LeggedRobot):
         start=0
         # commands
         num_section = 5
-        mirror_obs[:, 0] = obs[:, 1]
-        mirror_obs[:, 1] = obs[:, 0]
+        mirror_obs[:, 0] *= 1
+        mirror_obs[:, 1] *= 1
         mirror_obs[:, 3] *= -1
         mirror_obs[:, 4] *= -1
         start += num_section

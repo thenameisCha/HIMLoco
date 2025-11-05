@@ -345,6 +345,12 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
             **self.alg_cfg
         )
 
+    def save(self, path, infos=None):
+        super().save(path, infos)
+        torch.save({
+            'discriminator_state_dict': self.alg.discriminator.state_dict()
+            }, path)
+
     def load(self, path, load_optimizer = True):
         ret = super().load(path, load_optimizer)
         loaded_dict = torch.load(path, weights_only=False)
