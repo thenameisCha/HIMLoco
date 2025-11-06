@@ -42,6 +42,7 @@ from rsl_rl.env import VecEnv
 import wandb
 from rsl_rl.algorithms.amp_discriminator import AMPDiscriminator
 from rsl_rl.datasets.motion_loader import AMPLoader
+from datetime import datetime
 
 class HIMOnPolicyRunner:
 
@@ -94,7 +95,9 @@ class HIMOnPolicyRunner:
     def init_wandb(self, train_cfg):
         # WANDB INIT
         if self.LOG_WANDB:
+            experiment_name = train_cfg['runner']['experiment_name']
             wandb.init(project=train_cfg['runner']['wandb_name'])
+            wandb.run.name = experiment_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
