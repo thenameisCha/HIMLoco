@@ -155,7 +155,7 @@ class HIMPPO:
                     target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
                     mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
                     mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
-                    mean_mirror_loss += mirror_loss
+                    mean_mirror_loss += mirror_loss.item()
 
                     if self.symmetry_cfg['type']=='augmentation':
                         obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
@@ -398,7 +398,7 @@ class HIMPPO_AMP( HIMPPO ):
                     target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
                     mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
                     mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
-                    mean_mirror_loss += mirror_loss
+                    mean_mirror_loss += mirror_loss.item()
 
                     if self.symmetry_cfg['type']=='augmentation':
                         obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
