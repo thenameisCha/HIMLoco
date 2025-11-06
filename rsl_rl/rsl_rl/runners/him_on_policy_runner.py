@@ -95,6 +95,7 @@ class HIMOnPolicyRunner:
     def init_wandb(self, train_cfg):
         # WANDB INIT
         if self.LOG_WANDB:
+            wandb.login(key=os.environ["7ee5f86144a5627acd1f3f5025514e2befde8f51"])
             experiment_name = train_cfg['runner']['experiment_name']
             wandb.init(project=train_cfg['runner']['wandb_name'])
             wandb.run.name = experiment_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
