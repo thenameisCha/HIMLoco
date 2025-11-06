@@ -66,12 +66,13 @@ class IGRISC(LeggedRobot):
         mirror_obs[:, start+num_waist+num_legs//2+1:start+num_waist+num_legs//2+1+2] *= -1
         mirror_obs[:, start+num_waist+num_legs-1] *= -1
             # arms
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
-        mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
-        mirror_obs[:, start+num_waist+num_legs+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+2] *= -1
+        if num_arms > 0:
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
+            mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
+            mirror_obs[:, start+num_waist+num_legs+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+2] *= -1
         start += num_section
         # dof vel
         num_section = self.num_actions
@@ -85,12 +86,13 @@ class IGRISC(LeggedRobot):
         mirror_obs[:, start+num_waist+num_legs//2+1:start+num_waist+num_legs//2+1+2] *= -1
         mirror_obs[:, start+num_waist+num_legs-1] *= -1
             # arms
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
-        mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
-        mirror_obs[:, start+num_waist+num_legs+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+2] *= -1
+        if num_arms > 0:
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
+            mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
+            mirror_obs[:, start+num_waist+num_legs+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+2] *= -1
         start += num_section
         # actions
         num_section = self.num_actions
@@ -104,12 +106,13 @@ class IGRISC(LeggedRobot):
         mirror_obs[:, start+num_waist+num_legs//2+1:start+num_waist+num_legs//2+1+2] *= -1
         mirror_obs[:, start+num_waist+num_legs-1] *= -1
             # arms
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
-        mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
-        mirror_obs[:, start+num_waist+num_legs+1] *= -1
-        mirror_obs[:, start+num_waist+num_legs+2] *= -1
+        if num_arms > 0:
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms] = obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2]
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+num_arms//2+2] *= -1
+            mirror_obs[:, start+num_waist+num_legs:start+num_waist+num_legs+num_arms//2] = obs[:, start+num_waist+num_legs+num_arms//2:start+num_waist+num_legs+num_arms]
+            mirror_obs[:, start+num_waist+num_legs+1] *= -1
+            mirror_obs[:, start+num_waist+num_legs+2] *= -1
         start += num_section
         # base lin vel
         num_section = 3
@@ -359,3 +362,13 @@ class IGRISC(LeggedRobot):
         height_error = torch.square(footpos_in_body_frame[:, :, 2] - self.cfg.rewards.clearance_height_target).view(self.num_envs, -1)
         foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(self.num_envs, -1)
         return torch.exp(-torch.sum(height_error * foot_leteral_vel, dim=1) / 0.1)
+    
+class IGRISCWB( IGRISC ):
+    def _reward_dof_pos(self):
+        i = [3, 6, 7, 9, 12, 13]
+        j = [0, 1]
+        k = [2, 4, 5, 8, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+        ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
+        ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        return ret_i + ret_j + ret_k

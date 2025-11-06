@@ -155,3 +155,50 @@ class IGRISCAMP(IGRISC):
         return torch.concat((Lfoot_positions_local, Rfoot_positions_local), dim=-1)
     
     #------------ reward functions----------------
+
+class IGRISCWBAMP(IGRISCAMP):
+
+    def _reset_dofs_amp(self, env_ids, frames, amp_mask):
+        """ Resets DOF position and velocities of selected environmments
+        Positions are randomly selected within 0.5:1.5 x default positions.
+        Velocities are set to zero.
+
+        Args:
+            env_ids (List[int]): Environemnt ids
+            frames: AMP frames to initialize motion with
+        """
+        env_ids_amp = env_ids[amp_mask]
+        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
+        self.dof_vel[env_ids] = 0.
+        self.dof_pos[env_ids_amp, 1:1+14] = AMPLoader.get_joint_pose_batch(frames)
+        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        self.gym.set_dof_state_tensor_indexed(self.sim,
+                                              gymtorch.unwrap_tensor(self.dof_state),
+                                              gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+
+    def _get_amp_observations_dict(self):
+        base_height = self._get_base_heights()  
+        # projected_gravity = self.projected_gravity
+        base_lin_vel = self.base_lin_vel
+        base_ang_vel = self.base_ang_vel
+        foot_pos = self._feet_positions_in_base_frame()
+        dic = {
+            'q_pos':self.dof_pos[:, 1:1+14],
+            'q_vel':self.dof_vel[:, 1:1+14],
+            # 'root_height': base_height.unsqueeze(dim=-1),
+            'projected_gravity': self.projected_gravity,
+            # 'root_linvel': base_lin_vel[:, 0].unsqueeze(dim=-1),
+            # 'root_angvel': base_ang_vel,
+            'feet_pos': foot_pos,
+        }
+        return dic
+
+    def _reward_dof_pos(self):
+        i = [3, 6, 7, 9, 12, 13]
+        j = [0, 1]
+        k = [2, 4, 5, 8, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+        ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
+        ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        return ret_i + ret_j + ret_k
