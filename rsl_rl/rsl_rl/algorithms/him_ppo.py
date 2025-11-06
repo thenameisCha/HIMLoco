@@ -129,6 +129,7 @@ class HIMPPO:
 
     def process_mirror_step(self, mirror_next_critic_obs):
         self.mirror_transition.mirror_next_critic_observations = mirror_next_critic_obs
+        self.storage.add_mirror_transitions(self.mirror_transition)
     
     def compute_returns(self, last_critic_obs):
         last_values= self.actor_critic.evaluate(last_critic_obs).detach()
@@ -152,6 +153,7 @@ class HIMPPO:
                 loss = 0.
 
                 if self.enforce_symmetry:
+                    symmetry_coef = self.symmetry_cfg['symmetry_coef']
                     target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
                     mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
                     mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
@@ -167,7 +169,7 @@ class HIMPPO:
                         returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
                         old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
                     elif self.symmetry_cfg['type']=='loss':
-                        loss += mirror_loss
+                        loss += symmetry_coef*mirror_loss
                     else:
                         t = self.symmetry_cfg['type']
                         print(f'Invalid symmetry type {t}')
@@ -395,6 +397,7 @@ class HIMPPO_AMP( HIMPPO ):
                 loss = 0.
 
                 if self.enforce_symmetry:
+                    symmetry_coef = self.symmetry_cfg['symmetry_coef']
                     target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
                     mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
                     mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
@@ -410,7 +413,7 @@ class HIMPPO_AMP( HIMPPO ):
                         returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
                         old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
                     elif self.symmetry_cfg['type']=='loss':
-                        loss += mirror_loss
+                        loss += symmetry_coef*mirror_loss
                     else:
                         t = self.symmetry_cfg['type']
                         print(f'Invalid symmetry type {t}')

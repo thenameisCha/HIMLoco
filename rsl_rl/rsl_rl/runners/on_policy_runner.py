@@ -119,8 +119,8 @@ class OnPolicyRunner:
                     next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
                     mirror_next_critic_obs = mirror_critic_obs.clone().detach()
                     mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
-                    self.alg.process_env_step(rewards, dones, infos)
                     self.alg.process_mirror_step(mirror_next_critic_obs)
+                    self.alg.process_env_step(rewards, dones, infos)
 
                     if self.log_dir is not None:
                         # Book keeping

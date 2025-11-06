@@ -126,8 +126,8 @@ class RolloutStorage:
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
         self.mirror_observations[self.step].copy_(mirror_transition.mirror_observations)
-        self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
-        self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
+        if self.mirror_privileged_observations is not None: self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
+        if self.mirror_next_privileged_observations is not None: self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
 
     def _save_hidden_states(self, hidden_states):
         if hidden_states is None or hidden_states==(None, None):
@@ -294,3 +294,33 @@ class RolloutStorage:
                        mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch
                 
                 first_traj = last_traj
+
+class WMRRolloutStorage( RolloutStorage ):
+    class EstimatorTransition:
+        def __init__(self):
+            self.estimator_hidden_states = None
+
+        def clear(self):
+            self.__init__()
+
+    def __init__(self, num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device='cpu'):
+        super().__init__(num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device)
+        self.saved_hidden_states_e = None # hidden state from estimator rnn
+
+    def add_estimator_transition(self, estimator_transition: EstimatorTransition):
+        if self.step >= self.num_transitions_per_env:
+            raise AssertionError("Rollout buffer overflow")
+        self._save_estimator_hidden_states(estimator_transition.estimator_hidden_states)
+
+    def _save_estimator_hidden_states(self, hidden_states):
+        if hidden_states is None or hidden_states==(None, None):
+            return
+        # make a tuple out of GRU hidden state sto match the LSTM format
+        hid_e = hidden_states[0] if isinstance(hidden_states[0], tuple) else (hidden_states[0],)
+
+        # initialize if needed 
+        if self.saved_hidden_states_e is None:
+            self.saved_hidden_states_e = [torch.zeros(self.observations.shape[0], *hid_e[i].shape, device=self.device) for i in range(len(hid_e))]
+        # copy the states
+        for i in range(len(hid_e)):
+            self.saved_hidden_states_e[i][self.step].copy_(hid_e[i])

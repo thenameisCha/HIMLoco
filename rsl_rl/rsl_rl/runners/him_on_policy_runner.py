@@ -142,8 +142,8 @@ class HIMOnPolicyRunner:
                     mirror_next_critic_obs = mirror_critic_obs.clone().detach()
                     mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
 
-                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
                     self.alg.process_mirror_step(mirror_next_critic_obs)
+                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
                 
                     if self.log_dir is not None:
                         # Book keeping
@@ -426,8 +426,8 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
                     rewards, amp_rewards, _ = self.alg.discriminator.predict_amp_reward(
                         amp_obs, next_amp_obs_with_term, rewards)
                     amp_obs = next_amp_obs.clone()
-                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
                     self.alg.process_mirror_step(mirror_next_critic_obs)
+                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
                     self.alg.store_amp_transition(next_amp_obs_with_term)
                 
                     if self.log_dir is not None:

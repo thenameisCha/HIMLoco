@@ -270,8 +270,8 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
         # symmetry loss
         symmetry_cfg = {
             'enforce_symmetry' : True,
-            'type' : 'loss',
-            'symmetry_coef' : 50,
+            'type' : 'augmentation',
+            'symmetry_coef' : 10,
             'num_waist' : 2,
             'num_legs' : 12,
             'num_arms' : 0,
@@ -514,8 +514,8 @@ class IGRISCWBCfgPPO( IGRISCCfgPPO ):
         # symmetry loss
         symmetry_cfg = {
             'enforce_symmetry' : True,
-            'type' : 'loss', # augmentation
-            'symmetry_coef' : 50,
+            'type' : 'augmentation', # augmentation
+            'symmetry_coef' : 10,
             'num_waist' : 3,
             'num_legs' : 12,
             'num_arms' : 8,

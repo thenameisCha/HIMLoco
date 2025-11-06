@@ -120,8 +120,8 @@ class HIMRolloutStorage:
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
         self.mirror_observations[self.step].copy_(mirror_transition.mirror_observations)
-        self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
-        self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
+        if self.mirror_privileged_observations is not None: self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
+        if self.mirror_next_privileged_observations is not None: self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
 
     def clear(self):
         self.step = 0
