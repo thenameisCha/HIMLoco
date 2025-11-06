@@ -50,6 +50,15 @@ class RolloutStorage:
 
         def clear(self):
             self.__init__()
+            
+    class mirror_Transition:
+        def __init__(self):
+            self.mirror_observations = None
+            self.mirror_critic_observations = None
+            self.mirror_next_critic_observations = None
+
+        def clear(self):
+            self.__init__()
 
     def __init__(self, num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device='cpu'):
 
@@ -88,6 +97,15 @@ class RolloutStorage:
 
         self.step = 0
 
+        # For Mirror
+        self.mirror_observations = torch.zeros_like(self.observations)
+        if privileged_obs_shape[0] is not None:
+            self.mirror_privileged_observations = torch.zeros_like(self.privileged_observations)
+            self.mirror_next_privileged_observations = torch.zeros_like(self.next_privileged_observations)
+        else:
+            self.mirror_privileged_observations = None
+            self.mirror_next_privileged_observations = None
+
     def add_transitions(self, transition: Transition):
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
@@ -104,6 +122,13 @@ class RolloutStorage:
         self._save_hidden_states(transition.hidden_states)
         self.step += 1
 
+    def add_mirror_transitions(self, mirror_transition: mirror_Transition):
+        if self.step >= self.num_transitions_per_env:
+            raise AssertionError("Rollout buffer overflow")
+        self.mirror_observations[self.step].copy_(mirror_transition.mirror_observations)
+        self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
+        self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
+
     def _save_hidden_states(self, hidden_states):
         if hidden_states is None or hidden_states==(None, None):
             return
@@ -119,7 +144,6 @@ class RolloutStorage:
         for i in range(len(hid_a)):
             self.saved_hidden_states_a[i][self.step].copy_(hid_a[i])
             self.saved_hidden_states_c[i][self.step].copy_(hid_c[i])
-
 
     def clear(self):
         self.step = 0
@@ -169,6 +193,14 @@ class RolloutStorage:
         old_mu = self.mu.flatten(0, 1)
         old_sigma = self.sigma.flatten(0, 1)
 
+        mirror_observations = self.mirror_observations.flatten(0, 1)
+        if self.privileged_observations is not None:
+            mirror_critic_observations = self.mirror_privileged_observations.flatten(0, 1)
+            mirror_next_critic_observations = self.mirror_next_privileged_observations.flatten(0, 1)
+        else:
+            mirror_critic_observations = mirror_observations
+            mirror_next_critic_observations = mirror_observations
+
         for epoch in range(num_epochs):
             for i in range(num_mini_batches):
 
@@ -186,8 +218,14 @@ class RolloutStorage:
                 advantages_batch = advantages[batch_idx]
                 old_mu_batch = old_mu[batch_idx]
                 old_sigma_batch = old_sigma[batch_idx]
+
+                mirror_obs_batch = mirror_observations[batch_idx]
+                mirror_critic_obs_batch = mirror_critic_observations[batch_idx]
+                mirror_next_critic_obs_batch = mirror_next_critic_observations[batch_idx]
+
                 yield obs_batch, critic_observations_batch, actions_batch, next_critic_observations_batch, target_values_batch, advantages_batch, returns_batch, \
-                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, (None, None), None
+                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, (None, None), None,\
+                       mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch
 
     # for RNNs only
     def reccurent_mini_batch_generator(self, num_mini_batches, num_epochs=8):
@@ -199,6 +237,14 @@ class RolloutStorage:
         else: 
             padded_critic_obs_trajectories = padded_obs_trajectories
             padded_next_critic_obs_trajectories = padded_obs_trajectories
+
+        mirror_padded_obs_trajectories, _ = split_and_pad_trajectories(self.mirror_observations, self.dones)
+        if self.privileged_observations is not None: 
+            mirror_padded_critic_obs_trajectories, _ = split_and_pad_trajectories(self.mirror_privileged_observations, self.dones)
+            mirror_padded_next_critic_obs_trajectories, _ = split_and_pad_trajectories(self.mirror_next_privileged_observations, self.dones)
+        else: 
+            mirror_padded_critic_obs_trajectories = mirror_padded_obs_trajectories
+            mirror_padded_next_critic_obs_trajectories = mirror_padded_obs_trajectories
 
         mini_batch_size = self.num_envs // num_mini_batches
         for ep in range(num_epochs):
@@ -227,6 +273,10 @@ class RolloutStorage:
                 values_batch = self.values[:, start:stop]
                 old_actions_log_prob_batch = self.actions_log_prob[:, start:stop]
 
+                mirror_obs_batch = mirror_padded_obs_trajectories[:, first_traj:last_traj]
+                mirror_next_critic_obs_batch = mirror_padded_next_critic_obs_trajectories[:, first_traj:last_traj]
+                mirror_critic_obs_batch = mirror_padded_critic_obs_trajectories[:, first_traj, last_traj]
+
                 # reshape to [num_envs, time, num layers, hidden dim] (original shape: [time, num_layers, num_envs, hidden_dim])
                 # then take only time steps after dones (flattens num envs and time dimensions),
                 # take a batch of trajectories and finally reshape back to [num_layers, batch, hidden_dim]
@@ -240,6 +290,7 @@ class RolloutStorage:
                 hid_c_batch = hid_c_batch[0] if len(hid_c_batch)==1 else hid_a_batch
 
                 yield obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, values_batch, advantages_batch, returns_batch, \
-                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, (hid_a_batch, hid_c_batch), masks_batch
+                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, (hid_a_batch, hid_c_batch), masks_batch, \
+                       mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch
                 
                 first_traj = last_traj

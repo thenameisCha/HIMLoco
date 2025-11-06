@@ -50,6 +50,15 @@ class HIMRolloutStorage:
         def clear(self):
             self.__init__()
 
+    class mirror_Transition:
+        def __init__(self):
+            self.mirror_observations = None
+            self.mirror_critic_observations = None
+            self.mirror_next_critic_observations = None
+
+        def clear(self):
+            self.__init__()
+            
     def __init__(self, num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device='cpu'):
 
         self.device = device
@@ -83,6 +92,15 @@ class HIMRolloutStorage:
 
         self.step = 0
 
+        # For Mirror
+        self.mirror_observations = torch.zeros_like(self.observations)
+        if privileged_obs_shape[0] is not None:
+            self.mirror_privileged_observations = torch.zeros_like(self.privileged_observations)
+            self.mirror_next_privileged_observations = torch.zeros_like(self.next_privileged_observations)
+        else:
+            self.mirror_privileged_observations = None
+            self.mirror_next_privileged_observations = None
+
     def add_transitions(self, transition: Transition):
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
@@ -97,6 +115,13 @@ class HIMRolloutStorage:
         self.mu[self.step].copy_(transition.action_mean)
         self.sigma[self.step].copy_(transition.action_sigma)
         self.step += 1
+
+    def add_mirror_transitions(self, mirror_transition: mirror_Transition):
+        if self.step >= self.num_transitions_per_env:
+            raise AssertionError("Rollout buffer overflow")
+        self.mirror_observations[self.step].copy_(mirror_transition.mirror_observations)
+        self.mirror_privileged_observations[self.step].copy_(mirror_transition.mirror_critic_observations)
+        self.mirror_next_privileged_observations[self.step].copy_(mirror_transition.mirror_next_critic_observations)
 
     def clear(self):
         self.step = 0
@@ -146,6 +171,15 @@ class HIMRolloutStorage:
         old_mu = self.mu.flatten(0, 1)
         old_sigma = self.sigma.flatten(0, 1)
 
+        mirror_observations = self.mirror_observations.flatten(0, 1)
+        if self.privileged_observations is not None:
+            mirror_critic_observations = self.mirror_privileged_observations.flatten(0, 1)
+            mirror_next_critic_observations = self.mirror_next_privileged_observations.flatten(0, 1)
+        else:
+            mirror_critic_observations = mirror_observations
+            mirror_next_critic_observations = mirror_observations
+        
+
         for epoch in range(num_epochs):
             for i in range(num_mini_batches):
 
@@ -163,5 +197,11 @@ class HIMRolloutStorage:
                 advantages_batch = advantages[batch_idx]
                 old_mu_batch = old_mu[batch_idx]
                 old_sigma_batch = old_sigma[batch_idx]
+
+                mirror_obs_batch = mirror_observations[batch_idx]
+                mirror_critic_obs_batch = mirror_critic_observations[batch_idx]
+                mirror_next_critic_obs_batch = mirror_next_critic_observations[batch_idx]
+
                 yield obs_batch, critic_observations_batch, actions_batch, next_critic_observations_batch, target_values_batch, advantages_batch, returns_batch, \
-                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch
+                       old_actions_log_prob_batch, old_mu_batch, old_sigma_batch,\
+                       mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch

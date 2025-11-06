@@ -110,6 +110,8 @@ class HIMOnPolicyRunner:
         privileged_obs = self.env.get_privileged_observations()
         critic_obs = privileged_obs if privileged_obs is not None else obs
         obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
+        mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+        mirror_obs, mirror_critic_obs = mirror_obs.to(self.device), mirror_critic_obs.to(self.device)
         self.alg.actor_critic.train() # switch to train mode (for dropout for example)
         self.env.normalizer_obs.train()
 
@@ -126,16 +128,22 @@ class HIMOnPolicyRunner:
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs)
+                    self.alg.save_mirror_state(mirror_obs, mirror_critic_obs)
                     obs, privileged_obs, rewards, dones, infos, termination_ids, extras = self.env.step(actions)
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
                     termination_ids = termination_ids.to(self.device)
                     termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
+                    mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+                    mirror_termination_privileged_obs = extras['mirror_termination_privileged_obs'].to(self.device)
 
                     next_critic_obs = critic_obs.clone().detach()
                     next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    mirror_next_critic_obs = mirror_critic_obs.clone().detach()
+                    mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
 
                     self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
+                    self.alg.process_mirror_step(mirror_next_critic_obs)
                 
                     if self.log_dir is not None:
                         # Book keeping
@@ -377,6 +385,8 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
         amp_obs = self.env.get_amp_observations()
         critic_obs = privileged_obs if privileged_obs is not None else obs
         obs, critic_obs, amp_obs = obs.to(self.device), critic_obs.to(self.device), amp_obs.to(self.device)
+        mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+        mirror_obs, mirror_critic_obs = mirror_obs.to(self.device), mirror_critic_obs.to(self.device)
         self.alg.actor_critic.train() # switch to train mode (for dropout for example)
         self.alg.discriminator.train()
 
@@ -394,6 +404,7 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs)
+                    self.alg.save_mirror_state(mirror_obs, mirror_critic_obs)
                     self.alg.save_amp_obs(amp_obs)
                     obs, privileged_obs, rewards, dones, infos, termination_ids, extras = self.env.step(actions)
                     critic_obs = privileged_obs if privileged_obs is not None else obs
@@ -402,9 +413,13 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
                     termination_ids = termination_ids.to(self.device)
                     termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
                     termination_amp_obs = extras['termination_amp_obs'].to(self.device)
+                    mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+                    mirror_termination_privileged_obs = extras['mirror_termination_privileged_obs'].to(self.device)
 
                     next_critic_obs = critic_obs.clone().detach()
                     next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    mirror_next_critic_obs = mirror_critic_obs.clone().detach()
+                    mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
                     next_amp_obs_with_term = next_amp_obs.clone().detach()
                     next_amp_obs_with_term[termination_ids] = termination_amp_obs
 
@@ -412,6 +427,7 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
                         amp_obs, next_amp_obs_with_term, rewards)
                     amp_obs = next_amp_obs.clone()
                     self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
+                    self.alg.process_mirror_step(mirror_next_critic_obs)
                     self.alg.store_amp_transition(next_amp_obs_with_term)
                 
                     if self.log_dir is not None:

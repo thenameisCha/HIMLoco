@@ -75,6 +75,7 @@ class HIMPPO:
         self.storage = None # initialized later
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
         self.transition = HIMRolloutStorage.Transition()
+        self.mirror_transition = HIMRolloutStorage.mirror_Transition()
         self.min_std = min_std
 
         # PPO parameters
@@ -109,6 +110,10 @@ class HIMPPO:
         self.transition.critic_observations = critic_obs
         return self.transition.actions
     
+    def save_mirror_state(self, mirror_obs, mirror_critic_obs):
+        self.mirror_transition.mirror_observations = mirror_obs
+        self.mirror_transition.mirror_critic_observations = mirror_critic_obs
+
     def process_env_step(self, rewards, dones, infos, next_critic_obs):
         self.transition.next_critic_observations = next_critic_obs.clone()
         self.transition.rewards = rewards.clone()
@@ -121,6 +126,9 @@ class HIMPPO:
         self.storage.add_transitions(self.transition)
         self.transition.clear()
         self.actor_critic.reset(dones)
+
+    def process_mirror_step(self, mirror_next_critic_obs):
+        self.mirror_transition.mirror_next_critic_observations = mirror_next_critic_obs
     
     def compute_returns(self, last_critic_obs):
         last_values= self.actor_critic.evaluate(last_critic_obs).detach()
@@ -132,12 +140,39 @@ class HIMPPO:
         mean_estimation_loss = 0
         mean_swap_loss = 0
         mean_smooth_loss = 0
+        mean_mirror_loss = 0
         
         generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
 
         for obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
-            old_mu_batch, old_sigma_batch in generator:
+            old_mu_batch, old_sigma_batch, \
+            mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch in generator:
                 
+                og_batch_size = obs_batch.shape[0]
+                loss = 0.
+
+                if self.enforce_symmetry:
+                    target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
+                    mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
+                    mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
+                    mean_mirror_loss += mirror_loss
+
+                    if self.symmetry_cfg['type']=='augmentation':
+                        obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
+                        critic_obs_batch = torch.cat((critic_obs_batch, mirror_critic_obs_batch), dim=0)
+                        actions_batch = torch.cat((actions_batch, self.mirror_actions(actions_batch)), dim=0)
+                        next_critic_obs_batch = torch.cat((next_critic_obs_batch, mirror_next_critic_obs_batch), dim=0)
+                        target_values_batch = torch.cat((target_values_batch, target_values_batch), dim=0)
+                        advantages_batch = torch.cat((advantages_batch, advantages_batch), dim=0)
+                        returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
+                        old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
+                    elif self.symmetry_cfg['type']=='loss':
+                        loss += mirror_loss
+                    else:
+                        t = self.symmetry_cfg['type']
+                        print(f'Invalid symmetry type {t}')
+                        raise NotImplementedError
+
                 if self.use_LCP:
                     mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
                     lcp_obs_batch = obs_batch.clone() # for LCP loss
@@ -162,9 +197,9 @@ class HIMPPO:
                 self.actor_critic.act(obs_batch)
                 actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
                 value_batch = self.actor_critic.evaluate(critic_obs_batch)
-                mu_batch = self.actor_critic.action_mean
-                sigma_batch = self.actor_critic.action_std
-                entropy_batch = self.actor_critic.entropy
+                mu_batch = self.actor_critic.action_mean[:og_batch_size]
+                sigma_batch = self.actor_critic.action_std[:og_batch_size]
+                entropy_batch = self.actor_critic.entropy[:og_batch_size]
 
                 # KL
                 if self.desired_kl != None and self.schedule == 'adaptive':
@@ -201,7 +236,7 @@ class HIMPPO:
                 else:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() +\
+                loss += surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() +\
                 self.smooth_coef * gradient_penalty_loss
 
                 # Gradient step
@@ -211,7 +246,6 @@ class HIMPPO:
                 self.optimizer.step()
                 if not self.actor_critic.fixed_std and self.min_std is not None:
                     self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
-
 
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
@@ -224,13 +258,15 @@ class HIMPPO:
         mean_estimation_loss /= num_updates
         mean_swap_loss /= num_updates
         mean_smooth_loss /= num_updates
+        mean_mirror_loss /= num_updates
         self.storage.clear()
         loss_dict = {
             "value_function": mean_value_loss,
             "surrogate": mean_surrogate_loss,
             "estimation loss": estimation_loss,
             "swap loss": swap_loss,
-            "mean smooth loss": mean_smooth_loss
+            "mean smooth loss": mean_smooth_loss,
+            "symmetry": mean_mirror_loss,
         }
         return loss_dict
 
@@ -316,7 +352,6 @@ class HIMPPO_AMP( HIMPPO ):
              'weight_decay': 10e-2, 'name': 'amp_head'}]
 
         self.optimizer = optim.Adam(params, lr=learning_rate)
-        self.transition = RolloutStorage.Transition()      
         self.disc_coef = disc_coef
         self.disc_grad_pen = disc_grad_pen
 
@@ -337,7 +372,8 @@ class HIMPPO_AMP( HIMPPO ):
         mean_grad_pen_loss = 0
         mean_policy_pred = 0
         mean_expert_pred = 0
-        
+        mean_mirror_loss = 0
+
         amp_policy_generator = self.amp_storage.feed_forward_generator(
             self.num_learning_epochs * self.num_mini_batches,
             self.storage.num_envs * self.storage.num_transitions_per_env //
@@ -352,8 +388,34 @@ class HIMPPO_AMP( HIMPPO ):
             zip(generator, amp_policy_generator, amp_expert_generator):
                 
                 obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
-                old_mu_batch, old_sigma_batch = sample
+                old_mu_batch, old_sigma_batch, \
+                mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch = sample
                 
+                og_batch_size = obs_batch.shape[0]
+                loss = 0.
+
+                if self.enforce_symmetry:
+                    target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch).detach())
+                    mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch)
+                    mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
+                    mean_mirror_loss += mirror_loss
+
+                    if self.symmetry_cfg['type']=='augmentation':
+                        obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
+                        critic_obs_batch = torch.cat((critic_obs_batch, mirror_critic_obs_batch), dim=0)
+                        actions_batch = torch.cat((actions_batch, self.mirror_actions(actions_batch)), dim=0)
+                        next_critic_obs_batch = torch.cat((next_critic_obs_batch, mirror_next_critic_obs_batch), dim=0)
+                        target_values_batch = torch.cat((target_values_batch, target_values_batch), dim=0)
+                        advantages_batch = torch.cat((advantages_batch, advantages_batch), dim=0)
+                        returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
+                        old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
+                    elif self.symmetry_cfg['type']=='loss':
+                        loss += mirror_loss
+                    else:
+                        t = self.symmetry_cfg['type']
+                        print(f'Invalid symmetry type {t}')
+                        raise NotImplementedError
+                    
                 if self.use_LCP:
                     mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
                     lcp_obs_batch = obs_batch.clone() # for LCP loss
@@ -378,9 +440,9 @@ class HIMPPO_AMP( HIMPPO ):
                 self.actor_critic.act(obs_batch)
                 actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
                 value_batch = self.actor_critic.evaluate(critic_obs_batch)
-                mu_batch = self.actor_critic.action_mean
-                sigma_batch = self.actor_critic.action_std
-                entropy_batch = self.actor_critic.entropy
+                mu_batch = self.actor_critic.action_mean[:og_batch_size]
+                sigma_batch = self.actor_critic.action_std[:og_batch_size]
+                entropy_batch = self.actor_critic.entropy[:og_batch_size]
 
                 # KL
                 if self.desired_kl != None and self.schedule == 'adaptive':
@@ -437,7 +499,7 @@ class HIMPPO_AMP( HIMPPO ):
                 logit_weights = torch.flatten(self.discriminator.amp_linear.weight)
                 disc_logit_loss = 0.05*torch.sum(torch.square(logit_weights))
 
-                loss = (
+                loss += (
                     surrogate_loss + 
                     self.value_loss_coef * value_loss - 
                     self.entropy_coef * entropy_batch.mean() +
@@ -471,6 +533,7 @@ class HIMPPO_AMP( HIMPPO ):
         mean_amp_loss /= num_updates
         mean_policy_pred /= num_updates
         mean_expert_pred /= num_updates
+        mean_mirror_loss /= num_updates
         self.storage.clear()
         loss_dict = {
             "value_function": mean_value_loss,
@@ -480,5 +543,6 @@ class HIMPPO_AMP( HIMPPO ):
             "mean smooth loss": mean_smooth_loss,
             "mean_policy_pred": mean_policy_pred,
             "mean_expert_pred": mean_expert_pred,
+            "symmetry": mean_mirror_loss,
         }
         return loss_dict

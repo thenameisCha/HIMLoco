@@ -90,6 +90,8 @@ class OnPolicyRunner:
         privileged_obs = self.env.get_privileged_observations()
         critic_obs = privileged_obs if privileged_obs is not None else obs
         obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
+        mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+        mirror_obs, mirror_critic_obs = mirror_obs.to(self.device), mirror_critic_obs.to(self.device)
         self.alg.actor_critic.train() # switch to train mode (for dropout for example)
 
         ep_infos = []
@@ -105,11 +107,21 @@ class OnPolicyRunner:
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs)
-                    obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
+                    self.alg.save_mirror_state(mirror_obs, mirror_critic_obs)
+                    obs, privileged_obs, rewards, dones, infos, extras = self.env.step(actions)
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    termination_ids = termination_ids.to(self.device)
+                    termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
+                    mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+                    mirror_termination_privileged_obs = extras['mirror_termination_privileged_obs'].to(self.device)
+                    next_critic_obs = critic_obs.clone().detach()
+                    next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    mirror_next_critic_obs = mirror_critic_obs.clone().detach()
+                    mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
                     self.alg.process_env_step(rewards, dones, infos)
-                    
+                    self.alg.process_mirror_step(mirror_next_critic_obs)
+
                     if self.log_dir is not None:
                         # Book keeping
                         if 'episode' in infos:
