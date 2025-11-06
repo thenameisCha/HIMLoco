@@ -230,8 +230,8 @@ class IGRISCCfg( LeggedRobotCfg ):
         clearance_height_target = -0.75
         class scales:
             termination = -200.
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 1.0
+            tracking_lin_vel = 5.0
+            tracking_ang_vel = 2.5
             lin_vel_z = -1.
             joint_power = -1.e-3
             ang_vel_xy = -0.05

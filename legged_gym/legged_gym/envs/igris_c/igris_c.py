@@ -317,12 +317,16 @@ class IGRISC(LeggedRobot):
         # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
         contact = self.contact_forces[:, self.feet_indices, 2] > 1.
         contact_filt = torch.logical_or(contact, self.last_contacts) 
-        condition = (contact.long().sum(dim=-1) == 1)
+        in_contact = self.feet_contact_time > 0.
+        in_mode_time = torch.where(in_contact, self.feet_contact_time, self.feet_air_time)
+        single_stance = in_contact.int().sum(dim=-1) == 1
+        rew_airTime = torch.amin(torch.where(single_stance.unsqueeze(dim=-1), in_mode_time, 0.), dim=1).clip(max=0.6)
+        # rew_airTime = torch.sum(torch.clip(self.feet_air_time+self.feet_contact_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
+        # rew_airTime = torch.sum(torch.clip(self.feet_air_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
+        rew_airTime *= torch.norm(self.commands[:, :3], dim=1) > 0.1 #no reward for zero command
+
         self.feet_air_time += self.dt
         self.feet_contact_time += self.dt
-        # rew_airTime = torch.sum(torch.clip(self.feet_air_time+self.feet_contact_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
-        rew_airTime = torch.sum(torch.clip(self.feet_air_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
-        rew_airTime *= torch.norm(self.commands[:, :3], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
         self.feet_contact_time *= torch.logical_and(contact, self.last_contacts) 
         return rew_airTime
