@@ -181,7 +181,7 @@ class HIMActorCritic(nn.Module):
 
     def act_inference(self, obs_history, observations=None):
         vel, latent = self.estimator(obs_history)
-        actions_mean = self.actor(torch.cat((obs_history[:,:self.num_one_step_obs], vel, latent), dim=-1))
+        actions_mean = self.actor(torch.cat((obs_history[:,:self.num_one_step_obs], vel.detach(), latent.detach()), dim=-1))
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):
