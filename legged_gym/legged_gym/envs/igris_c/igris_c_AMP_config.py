@@ -71,5 +71,5 @@ class IGRISCAMPCfgPPO(IGRISCCfgPPO):
         amp_reward_coef = 3.0 * (IGRISCAMPCfg.sim.dt * IGRISCAMPCfg.control.decimation)
         amp_motion_files = IGRISCAMPCfg.env.amp_motion_files
         amp_num_preload_transitions = IGRISCAMPCfg.env.amp_num_preload_transitions
-        amp_task_reward_lerp = .8
+        amp_task_reward_lerp = .5
         amp_discr_hidden_dims = [128,]

@@ -317,7 +317,8 @@ class IGRISC(LeggedRobot):
         condition = (contact.long().sum(dim=-1) == 1)
         self.feet_air_time += self.dt
         self.feet_contact_time += self.dt
-        rew_airTime = torch.sum(torch.clip(self.feet_air_time+self.feet_contact_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
+        # rew_airTime = torch.sum(torch.clip(self.feet_air_time+self.feet_contact_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
+        rew_airTime = torch.sum(torch.clip(self.feet_air_time, max=0.4), dim=-1) * condition # reward only on first contact with the ground
         rew_airTime *= torch.norm(self.commands[:, :3], dim=1) > 0.1 #no reward for zero command
         self.feet_air_time *= ~contact_filt
         self.feet_contact_time *= torch.logical_and(contact, self.last_contacts) 
@@ -345,3 +346,16 @@ class IGRISC(LeggedRobot):
         contact_forces_masked = self.contact_forces.clone()
         contact_forces_masked[:, self.feet_indices, :] = 0.
         return torch.sum(1.*(torch.norm(contact_forces_masked, dim=-1) > 1.), dim=-1)
+    
+    def _reward_foot_clearance(self):
+        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
+        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        cur_footvel_translated = self.feet_vel - self.root_states[:, 7:10].unsqueeze(1)
+        footvel_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
+        for i in range(len(self.feet_indices)):
+            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
+            footvel_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footvel_translated[:, i, :])
+        
+        height_error = torch.square(footpos_in_body_frame[:, :, 2] - self.cfg.rewards.clearance_height_target).view(self.num_envs, -1)
+        foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(self.num_envs, -1)
+        return torch.exp(-torch.sum(height_error * foot_leteral_vel, dim=1) / 0.1)
