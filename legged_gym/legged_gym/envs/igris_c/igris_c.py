@@ -277,12 +277,15 @@ class IGRISC(LeggedRobot):
         compute_side(L_roll, L_pitch)
         compute_side(R_roll, R_pitch)
 
-    def _update_standstill_flags(self, env_ids):
-        if env_ids.numel():
-            self.standstill_flag[env_ids] = 0
-            zero_envs = env_ids[(torch.norm(self.commands[env_ids, :3], dim=-1) < 0.1)\
-                & (torch.norm(self.rb_states[env_ids, self.feet_indices[0], :2] - self.rb_states[env_ids, self.feet_indices[1], :2], dim=-1) < 0.3)]
-            self.standstill_flag[zero_envs] = 1
+    def _update_standstill_flags(self):
+        self.standstill_flag[:] = 0
+        zero_envs = (torch.norm(self.commands[:, :3], dim=-1) < 0.1)\
+            & (torch.norm(self.rb_states[:, self.feet_indices[0], :2] - self.rb_states[:, self.feet_indices[1], :2], dim=-1) < 0.3)
+        self.standstill_flag[zero_envs] = 1
+
+    def _post_physics_step_callback(self):
+        super()._post_physics_step_callback()
+        self._update_standstill_flags()
 
     def _init_buffers(self):
         self.target_raibert_footholds = torch.zeros((self.num_envs, 3), device=self.device)
@@ -297,16 +300,17 @@ class IGRISC(LeggedRobot):
         out_of_limits |= self.dof_pos > self.dof_pos_limits[..., 1]
         return torch.any(out_of_limits, dim=1)
     
-    def _compute_standstill_reward(self):
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 200.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 200.).float()
-        ret = (
-            (l_contact * r_contact)*\
-        (
-            torch.exp(-(self.dof_pos - self.default_dof_pos).square().amax(dim=-1)/0.1)+\
-            torch.exp(-self.dof_vel.square().amax(dim=-1)/0.1)
-        )
-        )[self.standstill_flag]
+    def _reward_stand_still(self):
+        # Penalize motion at zero commands
+        return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * self.standstill_flag
+    
+    def _reward_stand_still_vel(self):
+        return torch.sum(torch.abs(self.dof_vel), dim=1) * self.standstill_flag
+
+    def _reward_stand_still_contact(self):
+        l_contact = torch.clip(self.contact_forces[:, self.feet_indices[0], 2] - 200., min=0.)
+        r_contact = torch.clip(self.contact_forces[:, self.feet_indices[1], 2] - 200., min=0.)
+        ret = (l_contact+r_contact)*0.5*self.standstill_flag
         return ret
     
     def _reward_contact_power(self):
