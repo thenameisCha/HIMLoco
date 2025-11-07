@@ -317,6 +317,7 @@ class IGRISC(LeggedRobot):
         # Need to filter the contacts because the contact reporting of PhysX is unreliable on meshes
         contact = self.contact_forces[:, self.feet_indices, 2] > 1.
         contact_filt = torch.logical_or(contact, self.last_contacts) 
+        self.last_contacts = contact
         in_contact = self.feet_contact_time > 0.
         in_mode_time = torch.where(in_contact, self.feet_contact_time, self.feet_air_time)
         single_stance = in_contact.int().sum(dim=-1) == 1
@@ -332,8 +333,8 @@ class IGRISC(LeggedRobot):
         return rew_airTime
 
     def _reward_feet_contact_forces(self):
-        ret = torch.clip(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1)-700., max=400)
-        return ret*(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1) > 700)
+        ret = torch.clip(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1)-650., max=400)
+        return ret*(self.contact_forces[:, self.feet_indices, 2].sum(dim=-1) > 650)
 
     def _reward_stumble(self):
         # Penalize feet hitting vertical surfaces
@@ -353,19 +354,6 @@ class IGRISC(LeggedRobot):
         contact_forces_masked = self.contact_forces.clone()
         contact_forces_masked[:, self.feet_indices, :] = 0.
         return torch.sum(1.*(torch.norm(contact_forces_masked, dim=-1) > 1.), dim=-1)
-    
-    def _reward_foot_clearance(self):
-        cur_footpos_translated = self.feet_pos - self.root_states[:, 0:3].unsqueeze(1)
-        footpos_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
-        cur_footvel_translated = self.feet_vel - self.root_states[:, 7:10].unsqueeze(1)
-        footvel_in_body_frame = torch.zeros(self.num_envs, len(self.feet_indices), 3, device=self.device)
-        for i in range(len(self.feet_indices)):
-            footpos_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footpos_translated[:, i, :])
-            footvel_in_body_frame[:, i, :] = quat_rotate_inverse(self.base_quat, cur_footvel_translated[:, i, :])
-        
-        height_error = torch.square(footpos_in_body_frame[:, :, 2] - self.cfg.rewards.clearance_height_target).view(self.num_envs, -1).sqrt()
-        foot_leteral_vel = torch.sqrt(torch.sum(torch.square(footvel_in_body_frame[:, :, :2]), dim=2)).view(self.num_envs, -1)
-        return torch.exp(-torch.sum(height_error * foot_leteral_vel, dim=1) / 0.1)
     
 class IGRISCWB( IGRISC ):
     def _reward_dof_pos(self):

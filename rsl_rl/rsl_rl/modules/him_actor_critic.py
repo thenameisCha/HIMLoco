@@ -153,6 +153,9 @@ class HIMActorCritic(nn.Module):
     def forward(self):
         raise NotImplementedError
     
+    def forward(self, obs_history):
+        return self.act_inference(obs_history)
+    
     @property
     def action_mean(self):
         return self.distribution.mean

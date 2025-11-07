@@ -224,10 +224,10 @@ class IGRISCCfg( LeggedRobotCfg ):
         ]
 
     class rewards( LeggedRobotCfg.rewards ):
-        base_height_target = 0.95
+        base_height_target = 0.93
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
-        clearance_height_target = -0.75
+        clearance_height_target = -0.78
         class scales:
             termination = -200.
             tracking_lin_vel = 5.0
@@ -240,13 +240,13 @@ class IGRISCCfg( LeggedRobotCfg ):
             orientation = -2.
             dof_pos_limits = -2.
             dof_pos = 1.
-            feet_air_time = 1.
+            feet_air_time = 10.
             feet_contact_forces = -5.e-3
             stumble = -2.0
             feet_sliding = -0.25
             no_fly = -1.
             collision = -1.
-            foot_clearance = 0.5
+            foot_clearance = -10.
 
 
     class commands(LeggedRobotCfg.commands):
