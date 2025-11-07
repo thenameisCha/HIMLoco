@@ -233,11 +233,10 @@ class IGRISCCfg( LeggedRobotCfg ):
             tracking_lin_vel = 5.0
             tracking_ang_vel = 2.5
             lin_vel_z = -1.
-            joint_power = -2.e-3
+            joint_power = -1.e-3
             ang_vel_xy = -0.05
             dof_acc = -2.5e-7
             action_rate = -0.01
-            smoothness = -0.01
             orientation = -2.
             dof_pos_limits = -5.
             dof_pos = 1.
@@ -247,11 +246,11 @@ class IGRISCCfg( LeggedRobotCfg ):
             feet_sliding = -0.25
             no_fly = -1.
             collision = -1.
-            foot_clearance = -5.
+            foot_clearance = -8.
             slow_touchdown = -0.1
-            contact_power = -1.e-2
+            contact_power = -5.e-3
             stand_still = -1.
-            stand_still_vel = -0.1
+            stand_still_vel = -1
             stand_still_contact = 5.e-2
 
 
@@ -266,7 +265,7 @@ class IGRISCCfg( LeggedRobotCfg ):
 
 class IGRISCCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
-        entropy_coef = 0.00
+        entropy_coef = 0.005
         # LCP loss
         LCP_cfg = {
             'use_LCP': False,

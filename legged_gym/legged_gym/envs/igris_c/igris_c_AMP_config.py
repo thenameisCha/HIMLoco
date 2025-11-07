@@ -24,12 +24,12 @@ class IGRISCAMPCfg( IGRISCCfg ):
                 "end_time": 65./30.,
                 "weight": 1.0
             },
-            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/Female1Walking_c3d_0-B1_-_stand_to_walk_poses.pkl": {
-                "hz": 30,
-                "start_time": 1./30.,
-                "end_time": 35./30.,
-                "weight": 1.0
-            },
+            # "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/Female1Walking_c3d_0-B1_-_stand_to_walk_poses.pkl": {
+            #     "hz": 30,
+            #     "start_time": 1./30.,
+            #     "end_time": 35./30.,
+            #     "weight": 1.0
+            # },
             "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/turn_1_woohyun_phc 1.pkl": {
                 "hz": 30,
                 "start_time": 125./30.,

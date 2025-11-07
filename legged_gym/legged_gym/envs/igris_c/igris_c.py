@@ -305,7 +305,9 @@ class IGRISC(LeggedRobot):
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * self.standstill_flag
     
     def _reward_stand_still_vel(self):
-        return torch.sum(torch.abs(self.dof_vel), dim=1) * self.standstill_flag
+        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
+        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
+        return (l_contact * r_contact) * torch.sum(torch.abs(self.dof_vel), dim=1) * self.standstill_flag
 
     def _reward_stand_still_contact(self):
         l_contact = torch.clip(self.contact_forces[:, self.feet_indices[0], 2] - 200., min=0.)
@@ -329,10 +331,10 @@ class IGRISC(LeggedRobot):
         j = [0]
         k = [1, 3, 4, 7, 9, 10, 13]
         k_woyaw = [1,3,7,9,13]
-        ret_i = -0.03*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
-        ret_j = -0.12*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
-        ret_k = -0.22*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
-        ret_k[self.commands[:, 2].abs() > 0.4] = -0.25*torch.sum((self.dof_pos[:, k_woyaw] - self.default_dof_pos[:, k_woyaw]).abs(), dim=-1)[self.commands[:, 2].abs() > 0.4]
+        ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
+        ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        ret_k[self.commands[:, 2].abs() > 0.4] = -0.2*torch.sum((self.dof_pos[:, k_woyaw] - self.default_dof_pos[:, k_woyaw]).abs(), dim=-1)[self.commands[:, 2].abs() > 0.4]
         return ret_i + ret_j + ret_k
 
     def _reward_feet_air_time(self):
