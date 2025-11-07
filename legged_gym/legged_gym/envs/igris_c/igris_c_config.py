@@ -239,7 +239,7 @@ class IGRISCCfg( LeggedRobotCfg ):
             action_rate = -0.02
             smoothness = -0.01
             orientation = -2.
-            dof_pos_limits = -2.
+            dof_pos_limits = -5.
             dof_pos = 1.
             feet_air_time = 10.
             feet_contact_forces = -5.e-3

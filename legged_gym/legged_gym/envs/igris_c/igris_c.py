@@ -291,6 +291,12 @@ class IGRISC(LeggedRobot):
 
     #------------ reward functions----------------
 
+    def _reward_dof_pos_limits(self):
+        # Penalize dof positions too close to the limit
+        out_of_limits = self.dof_pos < self.dof_pos_limits[..., 0] # lower limit
+        out_of_limits |= self.dof_pos > self.dof_pos_limits[..., 1]
+        return torch.any(out_of_limits, dim=1)
+    
     def _compute_standstill_reward(self):
         l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 200.).float()
         r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 200.).float()
