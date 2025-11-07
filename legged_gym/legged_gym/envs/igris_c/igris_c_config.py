@@ -257,13 +257,14 @@ class IGRISCCfg( LeggedRobotCfg ):
         num_commands = 4
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
+            lin_vel_x = [-0.8, 0.8] # min max [m/s]
             lin_vel_y = [-0.5, 0.5]   # min max [m/s]
             ang_vel_yaw = [-1., 1.]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
 class IGRISCCfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
+        entropy_coef = 0.005
         # LCP loss
         LCP_cfg = {
             'use_LCP': False,
@@ -515,6 +516,7 @@ class IGRISCWBCfg( IGRISCCfg ):
 
 class IGRISCWBCfgPPO( IGRISCCfgPPO ):
     class algorithm(IGRISCCfgPPO.algorithm):
+        entropy_coef = 0.005
         # symmetry loss
         symmetry_cfg = {
             'enforce_symmetry' : True,

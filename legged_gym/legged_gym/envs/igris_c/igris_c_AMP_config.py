@@ -73,6 +73,13 @@ class IGRISCAMPCfgPPO(IGRISCCfgPPO):
         amp_num_preload_transitions = IGRISCAMPCfg.env.amp_num_preload_transitions
         amp_task_reward_lerp = .5
         amp_discr_hidden_dims = [128,]
+        LOG_WANDB = True
+        env_name = 'igris_c'
+        file_name = 'igris_c_AMP'
+        config_name = 'igris_c_AMP'
+        file2_name = 'igris_c'
+        config2_name = 'igris_c'
+        wandb_name = 'igris_c'
 
 class IGRISCWBAMPCfg( IGRISCWBCfg ):
     class env( IGRISCWBCfg.env ):
@@ -146,3 +153,10 @@ class IGRISCWBAMPCfgPPO( IGRISCWBCfgPPO ):
         amp_num_preload_transitions = IGRISCAMPCfg.env.amp_num_preload_transitions
         amp_task_reward_lerp = .5
         amp_discr_hidden_dims = [128,]
+        LOG_WANDB = True
+        env_name = 'igris_c'
+        file_name = 'igris_c_AMP'
+        config_name = 'igris_c_AMP'
+        file2_name = 'igris_c'
+        config2_name = 'igris_c'
+        wandb_name = 'igris_c'

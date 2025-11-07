@@ -652,7 +652,7 @@ class LeggedRobot(BaseTask):
         high_vel_env_ids = env_ids[high_vel_env_ids.nonzero(as_tuple=True)]
         # If the tracking reward is above 80% of the maximum, increase the range of commands
         if (torch.mean(self.episode_sums["tracking_lin_vel"][low_vel_env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["tracking_lin_vel"]) and (torch.mean(self.episode_sums["tracking_lin_vel"][high_vel_env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["tracking_lin_vel"]):
-            # self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.2, -self.cfg.commands.max_curriculum, 0.)
+            self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.2, -self.cfg.commands.max_curriculum, 0.)
             self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.2, 0., self.cfg.commands.max_curriculum)
 
 
@@ -1459,15 +1459,6 @@ class LeggedRobot(BaseTask):
     def _reward_stand_still(self):
         # Penalize motion at zero commands
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * (torch.norm(self.commands[:, :2], dim=1) < 0.1)
-
-    def _reward_feet_contact_forces(self):
-        # penalize high contact forces
-        return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
-
-    def _reward_slow_touchdown(self): # https://arxiv.org/pdf/2509.06342
-        ret = (((torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=-1) > 1.)&(torch.norm(self.last_contact_forces[:, self.feet_indices, :3], dim=-1) < 1.))*\
-            torch.amax(torch.cat((torch.norm(self.rb_states[:, self.feet_indices, 7:10], dim=-1, keepdim=True), torch.norm(self.last_feet_states[..., 7:10], dim=-1, keepdim=True)), dim=-1), dim=-1)).sum(dim=-1)
-        return ret
     
     def _reward_contact_power(self):
         ret = torch.sum(torch.sum(self.contact_forces[:, self.feet_indices] * self.rb_states[:, self.feet_indices, 7:10], dim=-1).abs(), dim=-1)

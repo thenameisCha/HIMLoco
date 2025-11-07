@@ -309,13 +309,24 @@ class IGRISC(LeggedRobot):
         )[self.standstill_flag]
         return ret
     
+    def _reward_contact_power(self):
+        ret = torch.sum(torch.sum(self.contact_forces[:, self.feet_indices] * self.rb_states[:, self.feet_indices, 7:10], dim=-1).abs(), dim=-1)
+        ret[self.standstill_flag] = 0.
+        return ret
+
+    def _reward_slow_touchdown(self): # https://arxiv.org/pdf/2509.06342
+        ret = (((torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=-1) > 1.)&(torch.norm(self.last_contact_forces[:, self.feet_indices, :3], dim=-1) < 1.))*\
+            torch.amax(torch.cat((torch.norm(self.rb_states[:, self.feet_indices, 7:10], dim=-1, keepdim=True), torch.norm(self.last_feet_states[..., 7:10], dim=-1, keepdim=True)), dim=-1), dim=-1)).sum(dim=-1)
+        ret[self.standstill_flag] = 0.
+        return ret
+    
     def _reward_dof_pos(self):
         i = [2, 5, 6, 8, 11, 12]
         j = [0]
         k = [1, 3, 4, 7, 9, 10, 13]
         ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
-        ret_j = -0.2*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
-        ret_k = -0.25*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        ret_j = -0.15*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
         return ret_i + ret_j + ret_k
 
     def _reward_feet_air_time(self):
