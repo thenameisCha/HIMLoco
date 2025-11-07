@@ -286,7 +286,8 @@ class LeggedRobot(BaseTask):
         """ Computes observations
         """
         current_obs, mirror_current_obs = self.get_current_obs()
-        current_obs, mirror_current_obs = self.normalizer_obs(current_obs), self.normalizer_obs(mirror_current_obs)
+        current_obs, mirror_current_obs = torch.split(self.normalizer_obs(torch.cat((current_obs, mirror_current_obs), dim=0)), self.num_envs, dim=0)
+        # current_obs, mirror_current_obs = self.normalizer_obs(current_obs), self.normalizer_obs(mirror_current_obs)
 
         self.obs_buf = torch.cat((current_obs[:, :self.num_one_step_obs], self.obs_buf[:, :-self.num_one_step_obs]), dim=-1)
         self.privileged_obs_buf = torch.cat((current_obs[:, :self.num_one_step_privileged_obs], self.privileged_obs_buf[:, :-self.num_one_step_privileged_obs]), dim=-1)
@@ -535,7 +536,7 @@ class LeggedRobot(BaseTask):
 
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
-        self.commands[env_ids, 2] *= (self.commands[env_ids, 2] > 0.2)
+        self.commands[env_ids, 2] *= (self.commands[env_ids, 2].abs() > 0.2)
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
