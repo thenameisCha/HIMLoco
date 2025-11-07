@@ -314,8 +314,8 @@ class IGRISC(LeggedRobot):
         j = [0]
         k = [1, 3, 4, 7, 9, 10, 13]
         ret_i = -0.05*torch.sum((self.dof_pos[:, i] - self.default_dof_pos[:, i]).abs(), dim=-1)
-        ret_j = -0.1*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
-        ret_k = -0.2*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
+        ret_j = -0.2*torch.sum((self.dof_pos[:, j] - self.default_dof_pos[:, j]).abs(), dim=-1)
+        ret_k = -0.25*torch.sum((self.dof_pos[:, k] - self.default_dof_pos[:, k]).abs(), dim=-1)
         return ret_i + ret_j + ret_k
 
     def _reward_feet_air_time(self):
