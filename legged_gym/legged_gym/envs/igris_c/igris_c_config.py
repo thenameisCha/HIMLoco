@@ -237,7 +237,7 @@ class IGRISCCfg( LeggedRobotCfg ):
             ang_vel_xy = -0.05
             dof_acc = -5.e-7
             action_rate = -0.02
-            smoothness = -0.02
+            smoothness = -0.01
             orientation = -2.
             dof_pos_limits = -2.
             dof_pos = 1.
@@ -249,8 +249,8 @@ class IGRISCCfg( LeggedRobotCfg ):
             collision = -1.
             foot_clearance = -10.
             slow_touchdown = -0.1
-            contact_power = -5.e-3
-            standing_still = .5
+            contact_power = -1.e-2
+            stand_still = .5
 
 
     class commands(LeggedRobotCfg.commands):
