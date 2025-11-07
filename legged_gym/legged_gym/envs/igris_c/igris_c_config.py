@@ -233,10 +233,11 @@ class IGRISCCfg( LeggedRobotCfg ):
             tracking_lin_vel = 5.0
             tracking_ang_vel = 2.5
             lin_vel_z = -1.
-            joint_power = -1.e-3
+            joint_power = -2.e-3
             ang_vel_xy = -0.05
-            dof_acc = -2.5e-7
-            action_rate = -0.01
+            dof_acc = -5.e-7
+            action_rate = -0.02
+            smoothness = -0.02
             orientation = -2.
             dof_pos_limits = -2.
             dof_pos = 1.
@@ -247,14 +248,17 @@ class IGRISCCfg( LeggedRobotCfg ):
             no_fly = -1.
             collision = -1.
             foot_clearance = -10.
+            slow_touchdown = -0.1
+            contact_power = -5.e-3
+            standing_still = .5
 
 
     class commands(LeggedRobotCfg.commands):
         num_commands = 4
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
-            lin_vel_x = [-0.5, 1.0] # min max [m/s]
-            lin_vel_y = [-0.3, 0.3]   # min max [m/s]
+            lin_vel_x = [-1.0, 1.0] # min max [m/s]
+            lin_vel_y = [-0.5, 0.5]   # min max [m/s]
             ang_vel_yaw = [-1., 1.]    # min max [rad/s]
             heading = [-3.14, 3.14]
 

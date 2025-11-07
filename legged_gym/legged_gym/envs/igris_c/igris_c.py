@@ -292,8 +292,8 @@ class IGRISC(LeggedRobot):
     #------------ reward functions----------------
 
     def _compute_standstill_reward(self):
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
+        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 200.).float()
+        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 200.).float()
         ret = (
             (l_contact * r_contact)*\
         (
