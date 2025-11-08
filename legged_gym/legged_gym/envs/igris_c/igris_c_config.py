@@ -240,7 +240,7 @@ class IGRISCCfg( LeggedRobotCfg ):
             orientation = -2.
             dof_pos_limits = -5.
             dof_pos = 1.
-            feet_air_time = 10.
+            feet_air_time = 8.
             feet_contact_forces = -5.e-3
             stumble = -2.0
             feet_sliding = -0.25
@@ -249,9 +249,9 @@ class IGRISCCfg( LeggedRobotCfg ):
             foot_clearance = -8.
             slow_touchdown = -0.1
             contact_power = -5.e-3
-            stand_still = -1.
-            stand_still_vel = -1
-            stand_still_contact = 5.e-2
+            # stand_still = -.5
+            # stand_still_vel = -.05
+            stand_still_contact = 5.
 
 
     class commands(LeggedRobotCfg.commands):
