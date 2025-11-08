@@ -286,28 +286,12 @@ class IGRISC(LeggedRobot):
     def _post_physics_step_callback(self):
         super()._post_physics_step_callback()
         self._update_standstill_flags()
+        self._update_commands()
 
     def _init_buffers(self):
         self.target_raibert_footholds = torch.zeros((self.num_envs, 3), device=self.device)
         self.standstill_flag = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
         return super()._init_buffers()
-
-    def _post_physics_step_callback(self):
-        """ Callback called before computing terminations, rewards, and observations
-            Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
-        """
-        # 
-        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0).nonzero(as_tuple=False).flatten()
-        self._resample_commands(env_ids)
-        self._update_commands()
-
-        if self.cfg.terrain.measure_heights:
-            self.measured_heights = self._get_heights()
-        if self.cfg.domain_rand.push_robots and  (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
-            self._push_robots()
-        if self.cfg.domain_rand.disturbance and (self.common_step_counter % self.cfg.domain_rand.disturbance_interval == 0):
-            self._disturbance_robots()
-        self._compute_joint_limits()
 
     def _resample_commands(self, env_ids):
         """ Randommly select commands of some environments
