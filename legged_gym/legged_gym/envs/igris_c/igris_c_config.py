@@ -250,8 +250,8 @@ class IGRISCCfg( LeggedRobotCfg ):
             slow_touchdown = -0.1
             contact_power = -5.e-3
             # stand_still = -.5
-            # stand_still_vel = -.05
-            stand_still_contact = 5.
+            stand_still_vel = -.1
+            stand_still_contact = 2.
 
 
     class commands(LeggedRobotCfg.commands):
@@ -259,7 +259,7 @@ class IGRISCCfg( LeggedRobotCfg ):
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
             lin_vel_x = [-0.8, 0.8] # min max [m/s]
-            lin_vel_y = [-0.5, 0.5]   # min max [m/s]
+            lin_vel_y = [-0.3, 0.3]   # min max [m/s]
             ang_vel_yaw = [-1., 1.]    # min max [rad/s]
             heading = [-3.14, 3.14]
 

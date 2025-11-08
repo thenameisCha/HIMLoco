@@ -42,18 +42,18 @@ class IGRISCAMPCfg( IGRISCCfg ):
                 "end_time": 75./30.,
                 "weight": 1.0
             },
-            # "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
-            #     "hz": 30,
-            #     "start_time": 150./30.,
-            #     "end_time": 180./30.,
-            #     "weight": 1.0
-            # },
-            # "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
-            #     "hz": 30,
-            #     "start_time": 57./30.,
-            #     "end_time": 99./30.,
-            #     "weight": 1.0
-            # },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
+                "hz": 30,
+                "start_time": 150./30.,
+                "end_time": 180./30.,
+                "weight": 1.0
+            },
+            "/home/robros/isaac_ws/HIMLoco/rsl_rl/rsl_rl/datasets/mocap_motions/igris_motions/side_step.pkl": {
+                "hz": 30,
+                "start_time": 57./30.,
+                "end_time": 99./30.,
+                "weight": 1.0
+            },
         }
         amp_preload_transitions = True
         amp_num_preload_transitions = 2000000

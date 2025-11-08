@@ -305,14 +305,12 @@ class IGRISC(LeggedRobot):
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * self.standstill_flag
     
     def _reward_stand_still_vel(self):
-        l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 100.).float()
-        r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 100.).float()
-        return (l_contact * r_contact) * torch.sum(torch.abs(self.dof_vel), dim=1) * self.standstill_flag
+        return torch.sum(torch.abs(self.dof_vel), dim=1) * self.standstill_flag
 
     def _reward_stand_still_contact(self):
         l_contact = (self.contact_forces[:, self.feet_indices[0], 2] > 250.).float()
         r_contact = (self.contact_forces[:, self.feet_indices[1], 2] > 250.).float()
-        ret = (l_contact * r_contact) * self.standstill_flag
+        ret = (l_contact + r_contact) * self.standstill_flag
         return ret
     
     def _reward_contact_power(self):
