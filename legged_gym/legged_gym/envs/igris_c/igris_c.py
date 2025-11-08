@@ -292,6 +292,51 @@ class IGRISC(LeggedRobot):
         self.standstill_flag = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
         return super()._init_buffers()
 
+    def _post_physics_step_callback(self):
+        """ Callback called before computing terminations, rewards, and observations
+            Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """
+        # 
+        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0).nonzero(as_tuple=False).flatten()
+        self._resample_commands(env_ids)
+        self._update_commands()
+
+        if self.cfg.terrain.measure_heights:
+            self.measured_heights = self._get_heights()
+        if self.cfg.domain_rand.push_robots and  (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
+            self._push_robots()
+        if self.cfg.domain_rand.disturbance and (self.common_step_counter % self.cfg.domain_rand.disturbance_interval == 0):
+            self._disturbance_robots()
+        self._compute_joint_limits()
+
+    def _resample_commands(self, env_ids):
+        """ Randommly select commands of some environments
+
+        Args:
+            env_ids (List[int]): Environments ids for which new commands are needed
+        """
+        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        if self.cfg.commands.heading_command:
+            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        else:
+            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+
+        # set y commands of high vel envs to zero
+        self.commands[env_ids, 1:3] *= (torch.norm(self.commands[env_ids, 0:1], dim=1) < 0.6).unsqueeze(1)
+
+        # set small commands to zero
+        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        self.commands[env_ids, 2] *= (self.commands[env_ids, 2].abs() > 0.2)
+
+    def _update_commands(self):
+        if self.cfg.commands.heading_command:
+            forward = quat_apply(self.base_quat, self.forward_vec)
+            heading = torch.atan2(forward[:, 1], forward[:, 0])
+            self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1])
+            self.commands[:, 2] *= (torch.norm(self.commands[:, 0:1], dim=1) < 0.6)
+            self.commands[:, 2] *= (self.commands[:, 2].abs() > 0.2)
+
     #------------ reward functions----------------
 
     def _reward_dof_pos_limits(self):
