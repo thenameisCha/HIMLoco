@@ -230,13 +230,6 @@ class LeggedRobot(BaseTask):
         self.feet_air_time[env_ids] = 0.
         self.feet_contact_time[env_ids] = 0.
         self.reset_buf[env_ids] = 1
-        # Reset obs buffers
-        # self.obs_buf[env_ids] = 0.
-        # if self.privileged_obs_buf is not None:
-        #     self.privileged_obs_buf[env_ids] = 0.
-        # self.mirror_obs_buf[env_ids] = 0.
-        # if self.mirror_privileged_obs_buf is not None:
-        #     self.mirror_privileged_obs_buf[env_ids] = 0.
 
         # update height measurements
         if self.cfg.terrain.measure_heights:
