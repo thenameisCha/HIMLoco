@@ -268,7 +268,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
         entropy_coef = 0.005
         # LCP loss
         LCP_cfg = {
-            'use_LCP': True,
+            'use_LCP': False,
             'smooth_coef': 1.e-3,
             'mask': [
             ]
