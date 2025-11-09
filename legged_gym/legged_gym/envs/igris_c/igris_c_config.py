@@ -4,7 +4,7 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 class IGRISCCfg( LeggedRobotCfg ):
     class env(LeggedRobotCfg.env):
         num_one_step_observations = 51
-        num_observations = num_one_step_observations * 6
+        num_observations = num_one_step_observations * 20
         num_one_step_privileged_obs = 51 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 14

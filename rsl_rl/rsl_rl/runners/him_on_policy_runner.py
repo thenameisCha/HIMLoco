@@ -43,6 +43,12 @@ import wandb
 from rsl_rl.algorithms.amp_discriminator import AMPDiscriminator
 from rsl_rl.datasets.motion_loader import AMPLoader
 from datetime import datetime
+from legged_gym.utils.helpers import class_to_dict
+from legged_gym import LEGGED_GYM_ROOT_DIR
+
+PROJECT_ROOT = '/home/robros/isaac_ws/HIMLoco/'
+LEGGED_GYM_ROOT = os.path.join(PROJECT_ROOT, 'legged_gym/legged_gym/')
+LEGGED_GYM_ENVS = os.path.join(PROJECT_ROOT, 'legged_gym/legged_gym/envs/')
 
 class HIMOnPolicyRunner:
 
@@ -98,7 +104,28 @@ class HIMOnPolicyRunner:
             wandb.login(key="7ee5f86144a5627acd1f3f5025514e2befde8f51")
             experiment_name = train_cfg['runner']['experiment_name']
             wandb.init(project=train_cfg['runner']['wandb_name'])
+            env_name = train_cfg['runner']['env_name']
+            file_name = train_cfg['runner']['file_name']
+            config_name = train_cfg['runner']['config_name']
+            file2_name = train_cfg['runner'].get('file2_name', None)
+            config2_name = train_cfg['runner'].get('config2_name', None)
             wandb.run.name = experiment_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            args = class_to_dict(train_cfg)
+            wandb.config.update(args)
+            wandb.save(os.path.join(LEGGED_GYM_ENVS, env_name, config_name+'_config.py'),policy="now")
+            wandb.save(os.path.join(LEGGED_GYM_ENVS, env_name, file_name+'.py'), policy="now")
+            if config2_name is not None:
+                wandb.save(os.path.join(LEGGED_GYM_ENVS, env_name, config2_name+'_config.py'),policy="now")
+            if file2_name is not None:
+                wandb.save(os.path.join(LEGGED_GYM_ENVS, env_name, file2_name+'.py'), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/runners/him_on_policy_runner.py'), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/algorithms/him_ppo.py'), policy="now")
+            wandb.save(self.env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/modules/him_actor_critic.py'), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/modules/him_estimator.py'), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/storage/him_rollout_storage.py'), policy="now")
+            wandb.save(os.path.join(PROJECT_ROOT, 'rsl_rl/rsl_rl/storage/replay_buffer.py'), policy="now")
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
