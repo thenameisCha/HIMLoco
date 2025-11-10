@@ -34,7 +34,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 from .actor_critic import ActorCritic, get_activation
-from rsl_rl.modules.him_estimator import HIMEstimator
+from rsl_rl.modules.him_estimator import HIMEstimator, PIMEstimator
 
 class RunningMeanStd:
     # Dynamically calculate mean and std
@@ -190,3 +190,46 @@ class HIMActorCritic(nn.Module):
     def evaluate(self, critic_observations, **kwargs):
         value = self.critic(critic_observations)
         return value
+    
+class PIMActorCritic(HIMActorCritic):
+    def __init__(self,  num_actor_obs,
+                        num_critic_obs,
+                        num_one_step_obs,
+                        num_actions,
+                        actor_hidden_dims=[512, 256, 128],
+                        critic_hidden_dims=[512, 256, 128],
+                        activation='elu',
+                        fixed_std=False,
+                        init_noise_std=1.0,
+                        **kwargs):
+        super(PIMActorCritic, self).__init__( num_actor_obs,
+                                              num_critic_obs,
+                                              num_one_step_obs,
+                                              num_actions,
+                                              actor_hidden_dims,
+                                              critic_hidden_dims,
+                                              activation,
+                                              fixed_std,
+                                              init_noise_std,
+                                              **kwargs)
+        num_perception = num_critic_obs - num_one_step_obs - 3 - 3
+        self.estimator = PIMEstimator(temporal_steps=self.history_size, num_one_step_obs=num_one_step_obs, num_perception=num_perception)
+        
+    def forward(self, obs_history, perception):
+        return self.act_inference(obs_history, perception)
+
+    def update_distribution(self, obs_history, perception):
+        with torch.no_grad():
+            vel, latent = self.estimator(obs_history, perception)
+        actor_input = torch.cat((obs_history[:,:self.num_one_step_obs], vel, latent), dim=-1)
+        mean = self.actor(actor_input)
+        self.distribution = Normal(mean, mean*0. + self.std)
+    
+    def act(self, obs_history=None, perception=None, **kwargs):
+        self.update_distribution(obs_history, perception)
+        return self.distribution.sample()    
+
+    def act_inference(self, obs_history, perception, observations=None):
+        vel, latent = self.estimator(obs_history, perception)
+        actions_mean = self.actor(torch.cat((obs_history[:,:self.num_one_step_obs], vel.detach(), latent.detach()), dim=-1))
+        return actions_mean

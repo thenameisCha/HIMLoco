@@ -160,3 +160,10 @@ class IGRISCWBAMPCfgPPO( IGRISCWBCfgPPO ):
         file2_name = 'igris_c'
         config2_name = 'igris_c'
         wandb_name = 'igris_c'
+
+class IGRISCAMPIMCfg( IGRISCAMPCfg ):
+    pass
+class IGRISCAMPIMCfgPPO( IGRISCAMPCfgPPO ):
+    class runner(IGRISCAMPCfgPPO.runner):
+        algorithm_class_name = 'PIMPPO_AMP'
+        policy_class_name = 'PIMActorCritic'

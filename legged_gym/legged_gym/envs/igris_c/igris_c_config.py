@@ -228,6 +228,7 @@ class IGRISCCfg( LeggedRobotCfg ):
 
         torque_delay = False
         minimum_torque_delay = 0.005
+        maximum_torque_delay = 0.02
 
     class rewards( LeggedRobotCfg.rewards ):
         base_height_target = 0.93
@@ -536,3 +537,11 @@ class IGRISCWBCfgPPO( IGRISCCfgPPO ):
             'num_legs' : 12,
             'num_arms' : 8,
         }
+
+class IGRISCPIMCfg( IGRISCCfg ):
+    pass
+
+class IGRISCPIMCfgPPO( IGRISCCfgPPO ):
+    class runner(IGRISCCfgPPO.runner):
+        algorithm_class_name = 'PIMPPO'
+        policy_class_name = 'PIMActorCritic'

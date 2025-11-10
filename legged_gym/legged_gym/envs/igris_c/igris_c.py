@@ -38,7 +38,7 @@ class IGRISC(LeggedRobot):
     def reset_idx(self, env_ids):
         self.torques_buf[:, env_ids, :] = 0.
         if self.cfg.domain_rand.torque_delay:
-            self.torques_delay_steps[env_ids] = torch.randint(int(self.cfg.domain_rand.minimum_delay/self.cfg.sim.dt), self.cfg.control.decimation, (len(env_ids), ), device=self.device)
+            self.torques_delay_steps[env_ids] = torch.randint(int(self.cfg.domain_rand.minimum_torque_delay/self.cfg.sim.dt), int(self.cfg.domain_rand.maximum_torque_delay/self.cfg.sim.dt), (len(env_ids), ), device=self.device)
         return super().reset_idx(env_ids)
 
     def _mirror_observations(self, obs):
@@ -294,6 +294,7 @@ class IGRISC(LeggedRobot):
         super()._post_physics_step_callback()
         self._update_standstill_flags()
         self._update_commands()
+        self._compute_centroidal_dynamics()
 
     def _init_buffers(self):
         self.target_raibert_footholds = torch.zeros((self.num_envs, 3), device=self.device)
@@ -319,7 +320,8 @@ class IGRISC(LeggedRobot):
         self.commands[env_ids, 1:3] *= (torch.norm(self.commands[env_ids, 0:1], dim=1) < 0.6).unsqueeze(1)
 
         # set small commands to zero
-        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        # self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        self.commands[env_ids, :2] *= (torch.abs(self.commands[env_ids, :2]) > 0.2)
         self.commands[env_ids, 2] *= (self.commands[env_ids, 2].abs() > 0.2)
 
     def _update_commands(self):

@@ -37,7 +37,7 @@ from legged_gym.envs.aliengo.aliengo_config import AlienGoRoughCfg, AlienGoRough
 from legged_gym.envs.igris_c.igris_c import IGRISC, IGRISCWB
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg, IGRISCCfgPPO, IGRISCWBCfg, IGRISCWBCfgPPO
 from legged_gym.envs.igris_c.igris_c_AMP import IGRISCAMP, IGRISCWBAMP
-from legged_gym.envs.igris_c.igris_c_AMP_config import IGRISCAMPCfg, IGRISCAMPCfgPPO, IGRISCWBAMPCfg, IGRISCWBAMPCfgPPO
+from legged_gym.envs.igris_c.igris_c_AMP_config import IGRISCAMPCfg, IGRISCAMPCfgPPO, IGRISCWBAMPCfg, IGRISCWBAMPCfgPPO, IGRISCAMPIMCfg, IGRISCAMPIMCfgPPO
 
 
 import os
@@ -51,3 +51,4 @@ task_registry.register( "igris_c", IGRISC, IGRISCCfg(), IGRISCCfgPPO())
 task_registry.register( "igris_c_wb", IGRISCWB, IGRISCWBCfg(), IGRISCWBCfgPPO())
 task_registry.register( "igris_c_amp", IGRISCAMP, IGRISCAMPCfg(), IGRISCAMPCfgPPO())
 task_registry.register( "igris_c_wb_amp", IGRISCWBAMP, IGRISCWBAMPCfg(), IGRISCWBAMPCfgPPO())
+task_registry.register( "igris_c_amp_pim", IGRISCAMP, IGRISCAMPIMCfg(), IGRISCAMPIMCfgPPO())

@@ -29,5 +29,5 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from .ppo import PPO
-from .him_ppo import HIMPPO, HIMPPO_AMP
+from .him_ppo import HIMPPO, HIMPPO_AMP, PIMPPO, PIMPPO_AMP
 from .amp_discriminator import AMPDiscriminator

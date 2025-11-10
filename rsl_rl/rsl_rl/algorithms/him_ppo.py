@@ -32,7 +32,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from rsl_rl.modules import HIMActorCritic
+from rsl_rl.modules import HIMActorCritic, PIMActorCritic
 from rsl_rl.storage import RolloutStorage, HIMRolloutStorage
 from rsl_rl.storage.replay_buffer import ReplayBuffer
 
@@ -464,6 +464,350 @@ class HIMPPO_AMP( HIMPPO ):
 
                 #Estimator Update
                 estimation_loss, swap_loss = self.actor_critic.estimator.update(obs_batch, next_critic_obs_batch, lr=self.learning_rate)
+
+                # Surrogate loss
+                ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
+                surrogate = -torch.squeeze(advantages_batch) * ratio
+                surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
+                                                                                1.0 + self.clip_param)
+                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
+
+                # Value function loss
+                if self.use_clipped_value_loss:
+                    value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(-self.clip_param,
+                                                                                                    self.clip_param)
+                    value_losses = (value_batch - returns_batch).pow(2)
+                    value_losses_clipped = (value_clipped - returns_batch).pow(2)
+                    value_loss = torch.max(value_losses, value_losses_clipped).mean()
+                else:
+                    value_loss = (returns_batch - value_batch).pow(2).mean()
+
+                # Discriminator loss.
+                policy_state, policy_next_state = sample_amp_policy
+                expert_state, expert_next_state = sample_amp_expert
+
+                policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+                expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+
+                # LSGAN
+                expert_loss = torch.nn.MSELoss()(
+                    expert_d, torch.ones(expert_d.size(), device=self.device))
+                policy_loss = torch.nn.MSELoss()(
+                    policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
+                amp_loss = (expert_loss + policy_loss) *0.5
+                grad_pen_loss = self.discriminator.compute_grad_pen( 
+                    *sample_amp_expert, lambda_=self.disc_grad_pen) 
+                
+                # logit reg
+                logit_weights = torch.flatten(self.discriminator.amp_linear.weight)
+                disc_logit_loss = 0.05*torch.sum(torch.square(logit_weights))
+
+                loss += (
+                    surrogate_loss + 
+                    self.value_loss_coef * value_loss - 
+                    self.entropy_coef * entropy_batch.mean() +
+                    self.smooth_coef * gradient_penalty_loss + 
+                    self.disc_coef*(amp_loss + grad_pen_loss + disc_logit_loss)
+                    )
+
+                # Gradient step
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+                self.optimizer.step()
+                if not self.actor_critic.fixed_std and self.min_std is not None:
+                    self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
+
+                mean_value_loss += value_loss.item()
+                mean_surrogate_loss += surrogate_loss.item()
+                mean_estimation_loss += estimation_loss
+                mean_swap_loss += swap_loss
+                mean_amp_loss += amp_loss.item()
+                mean_grad_pen_loss += grad_pen_loss.item()
+                mean_policy_pred += policy_d.mean().item()
+                mean_expert_pred += expert_d.mean().item()
+
+        num_updates = self.num_learning_epochs * self.num_mini_batches
+        mean_value_loss /= num_updates
+        mean_surrogate_loss /= num_updates
+        mean_estimation_loss /= num_updates
+        mean_swap_loss /= num_updates
+        mean_smooth_loss /= num_updates
+        mean_amp_loss /= num_updates
+        mean_policy_pred /= num_updates
+        mean_expert_pred /= num_updates
+        mean_mirror_loss /= num_updates
+        self.storage.clear()
+        loss_dict = {
+            "value_function": mean_value_loss,
+            "surrogate": mean_surrogate_loss,
+            "estimation loss": estimation_loss,
+            "swap loss": swap_loss,
+            "mean smooth loss": mean_smooth_loss,
+            "mean_policy_pred": mean_policy_pred,
+            "mean_expert_pred": mean_expert_pred,
+            "symmetry": mean_mirror_loss,
+        }
+        return loss_dict
+    
+class PIMPPO( HIMPPO ):
+    actor_critic: PIMActorCritic
+    def act(self, obs, critic_obs):
+        # Compute the actions and values
+        perception = critic_obs[:, -187:]
+        self.transition.actions = self.actor_critic.act(obs, perception).detach()
+        self.transition.values = self.actor_critic.evaluate(critic_obs).detach()
+        self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
+        self.transition.action_mean = self.actor_critic.action_mean.detach()
+        self.transition.action_sigma = self.actor_critic.action_std.detach()
+        # need to record obs and critic_obs before env.step()
+        self.transition.observations = obs
+        self.transition.critic_observations = critic_obs
+        return self.transition.actions
+    
+    def update(self):
+        mean_value_loss = 0
+        mean_surrogate_loss = 0
+        mean_estimation_loss = 0
+        mean_swap_loss = 0
+        mean_smooth_loss = 0
+        mean_mirror_loss = 0
+        
+        generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+
+        for obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
+            old_mu_batch, old_sigma_batch, \
+            mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch in generator:
+                
+                og_batch_size = obs_batch.shape[0]
+                perception_batch, mirror_perception_batch = critic_obs_batch[:, -187:], mirror_critic_obs_batch[:, -187:]
+                loss = 0.
+
+                if self.enforce_symmetry:
+                    symmetry_coef = self.symmetry_cfg['symmetry_coef']
+                    target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch, perception_batch).detach())
+                    mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch, mirror_perception_batch)
+                    mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
+                    mean_mirror_loss += mirror_loss.item()
+
+                    if self.symmetry_cfg['type']=='augmentation':
+                        obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
+                        critic_obs_batch = torch.cat((critic_obs_batch, mirror_critic_obs_batch), dim=0)
+                        actions_batch = torch.cat((actions_batch, self.mirror_actions(actions_batch)), dim=0)
+                        next_critic_obs_batch = torch.cat((next_critic_obs_batch, mirror_next_critic_obs_batch), dim=0)
+                        target_values_batch = torch.cat((target_values_batch, target_values_batch), dim=0)
+                        advantages_batch = torch.cat((advantages_batch, advantages_batch), dim=0)
+                        returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
+                        old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
+                        perception_batch = torch.cat((perception_batch, mirror_perception_batch), dim=0)
+                    elif self.symmetry_cfg['type']=='loss':
+                        loss += symmetry_coef*mirror_loss
+                    else:
+                        t = self.symmetry_cfg['type']
+                        print(f'Invalid symmetry type {t}')
+                        raise NotImplementedError
+
+                if self.use_LCP:
+                    mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
+                    lcp_obs_batch = obs_batch.clone() # for LCP loss
+                    lcp_obs_batch.requires_grad_()
+                    perception_batch.requires_grad_()
+                    mask = torch.zeros_like(lcp_obs_batch)
+                    mask[..., mask_idx] = 1
+                    eff_lcp_obs_batch = lcp_obs_batch*(1-mask) + lcp_obs_batch.detach()*mask
+                    # lcp_hidden_batch.requires_grad_()
+                    self.actor_critic.act(eff_lcp_obs_batch, perception_batch)
+                    actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                    gradient_penalty_loss = self._calc_grad_penalty(obs_batch=torch.cat((lcp_obs_batch, perception_batch), dim=-1), actions_log_prob_batch=actions_log_prob_batch)
+                    mean_smooth_loss += gradient_penalty_loss.item()
+                else:
+                    gradient_penalty_loss = 0.
+                    # GRAD PEN FOR SMOOTH MOTION from "Learning Smooth Humanoid Locomotion through Lipschitz-Constrained Policies"
+                    # gradient_penalty_loss = self._calc_grad_penalty_2(
+                    #     obs_batch    = lcp_obs_batch,
+                    #     hidden_batch = lcp_hidden_batch,
+                    #     log_prob     = actions_log_prob_batch
+                    # )
+
+                self.actor_critic.act(obs_batch, perception_batch)
+                actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                value_batch = self.actor_critic.evaluate(critic_obs_batch)
+                mu_batch = self.actor_critic.action_mean[:og_batch_size]
+                sigma_batch = self.actor_critic.action_std[:og_batch_size]
+                entropy_batch = self.actor_critic.entropy[:og_batch_size]
+
+                # KL
+                if self.desired_kl != None and self.schedule == 'adaptive':
+                    with torch.inference_mode():
+                        kl = torch.sum(
+                            torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
+                        kl_mean = torch.mean(kl)
+
+                        if kl_mean > self.desired_kl * 2.0:
+                            self.learning_rate = max(1e-5, self.learning_rate / 1.5)
+                        elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
+                            self.learning_rate = min(1e-2, self.learning_rate * 1.5)
+                        
+                        for param_group in self.optimizer.param_groups:
+                            param_group['lr'] = self.learning_rate
+
+                #Estimator Update
+                estimation_loss, swap_loss = self.actor_critic.estimator.update(obs_batch, next_critic_obs_batch, perception_batch, lr=self.learning_rate)
+
+                # Surrogate loss
+                ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
+                surrogate = -torch.squeeze(advantages_batch) * ratio
+                surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
+                                                                                1.0 + self.clip_param)
+                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
+
+                # Value function loss
+                if self.use_clipped_value_loss:
+                    value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(-self.clip_param,
+                                                                                                    self.clip_param)
+                    value_losses = (value_batch - returns_batch).pow(2)
+                    value_losses_clipped = (value_clipped - returns_batch).pow(2)
+                    value_loss = torch.max(value_losses, value_losses_clipped).mean()
+                else:
+                    value_loss = (returns_batch - value_batch).pow(2).mean()
+
+                loss += surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() +\
+                self.smooth_coef * gradient_penalty_loss
+
+                # Gradient step
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+                self.optimizer.step()
+                if not self.actor_critic.fixed_std and self.min_std is not None:
+                    self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
+
+                mean_value_loss += value_loss.item()
+                mean_surrogate_loss += surrogate_loss.item()
+                mean_estimation_loss += estimation_loss
+                mean_swap_loss += swap_loss
+
+        num_updates = self.num_learning_epochs * self.num_mini_batches
+        mean_value_loss /= num_updates
+        mean_surrogate_loss /= num_updates
+        mean_estimation_loss /= num_updates
+        mean_swap_loss /= num_updates
+        mean_smooth_loss /= num_updates
+        mean_mirror_loss /= num_updates
+        self.storage.clear()
+        loss_dict = {
+            "value_function": mean_value_loss,
+            "surrogate": mean_surrogate_loss,
+            "estimation loss": estimation_loss,
+            "swap loss": swap_loss,
+            "mean smooth loss": mean_smooth_loss,
+            "symmetry": mean_mirror_loss,
+        }
+        return loss_dict
+    
+class PIMPPO_AMP( PIMPPO ):
+    def update(self):
+        mean_value_loss = 0
+        mean_surrogate_loss = 0
+        mean_estimation_loss = 0
+        mean_swap_loss = 0
+        mean_smooth_loss = 0
+        mean_amp_loss = 0
+        mean_grad_pen_loss = 0
+        mean_policy_pred = 0
+        mean_expert_pred = 0
+        mean_mirror_loss = 0
+
+        amp_policy_generator = self.amp_storage.feed_forward_generator(
+            self.num_learning_epochs * self.num_mini_batches,
+            self.storage.num_envs * self.storage.num_transitions_per_env //
+                self.num_mini_batches)
+        amp_expert_generator = self.amp_data.feed_forward_generator(
+            self.num_learning_epochs * self.num_mini_batches,
+            self.storage.num_envs * self.storage.num_transitions_per_env //
+                self.num_mini_batches)
+        generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+
+        for sample, sample_amp_policy, sample_amp_expert in \
+            zip(generator, amp_policy_generator, amp_expert_generator):
+                
+                obs_batch, critic_obs_batch, actions_batch, next_critic_obs_batch, target_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch, \
+                old_mu_batch, old_sigma_batch, \
+                mirror_obs_batch, mirror_critic_obs_batch, mirror_next_critic_obs_batch = sample
+                perception_batch, mirror_perception_batch = critic_obs_batch[:, -187:], mirror_critic_obs_batch[:, -187:]
+                og_batch_size = obs_batch.shape[0]
+                loss = 0.
+
+                if self.enforce_symmetry:
+                    symmetry_coef = self.symmetry_cfg['symmetry_coef']
+                    target_mirrored_action_mean = self.mirror_actions(self.actor_critic.act_inference(obs_batch, perception_batch).detach())
+                    mirrored_action_mean = self.actor_critic.act_inference(mirror_obs_batch, mirror_perception_batch)
+                    mirror_loss = (mirrored_action_mean - target_mirrored_action_mean).pow(2).mean()
+                    mean_mirror_loss += mirror_loss.item()
+
+                    if self.symmetry_cfg['type']=='augmentation':
+                        obs_batch = torch.cat((obs_batch, mirror_obs_batch), dim=0)
+                        critic_obs_batch = torch.cat((critic_obs_batch, mirror_critic_obs_batch), dim=0)
+                        actions_batch = torch.cat((actions_batch, self.mirror_actions(actions_batch)), dim=0)
+                        next_critic_obs_batch = torch.cat((next_critic_obs_batch, mirror_next_critic_obs_batch), dim=0)
+                        target_values_batch = torch.cat((target_values_batch, target_values_batch), dim=0)
+                        advantages_batch = torch.cat((advantages_batch, advantages_batch), dim=0)
+                        returns_batch = torch.cat((returns_batch, returns_batch), dim=0)
+                        old_actions_log_prob_batch = torch.cat((old_actions_log_prob_batch, old_actions_log_prob_batch), dim=0)
+                        perception_batch = torch.cat((perception_batch, mirror_perception_batch), dim=0)
+                    elif self.symmetry_cfg['type']=='loss':
+                        loss += symmetry_coef*mirror_loss
+                    else:
+                        t = self.symmetry_cfg['type']
+                        print(f'Invalid symmetry type {t}')
+                        raise NotImplementedError
+                    
+                if self.use_LCP:
+                    mask_idx = self.LCP_cfg['mask'] if 'mask' in self.LCP_cfg else []
+                    lcp_obs_batch = obs_batch.clone() # for LCP loss
+                    lcp_obs_batch.requires_grad_()
+                    perception_batch.requires_grad_()
+                    mask = torch.zeros_like(lcp_obs_batch)
+                    mask[..., mask_idx] = 1
+                    eff_lcp_obs_batch = lcp_obs_batch*(1-mask) + lcp_obs_batch.detach()*mask
+                    # lcp_hidden_batch.requires_grad_()
+                    self.actor_critic.act(eff_lcp_obs_batch, perception_batch)
+                    actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                    gradient_penalty_loss = self._calc_grad_penalty(obs_batch=torch.cat((lcp_obs_batch, perception_batch), dim=-1), actions_log_prob_batch=actions_log_prob_batch)
+                    mean_smooth_loss += gradient_penalty_loss.item()
+                else:
+                    gradient_penalty_loss = 0.
+                    # GRAD PEN FOR SMOOTH MOTION from "Learning Smooth Humanoid Locomotion through Lipschitz-Constrained Policies"
+                    # gradient_penalty_loss = self._calc_grad_penalty_2(
+                    #     obs_batch    = lcp_obs_batch,
+                    #     hidden_batch = lcp_hidden_batch,
+                    #     log_prob     = actions_log_prob_batch
+                    # )
+
+                self.actor_critic.act(obs_batch, perception_batch)
+                actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+                value_batch = self.actor_critic.evaluate(critic_obs_batch)
+                mu_batch = self.actor_critic.action_mean[:og_batch_size]
+                sigma_batch = self.actor_critic.action_std[:og_batch_size]
+                entropy_batch = self.actor_critic.entropy[:og_batch_size]
+
+                # KL
+                if self.desired_kl != None and self.schedule == 'adaptive':
+                    with torch.inference_mode():
+                        kl = torch.sum(
+                            torch.log(sigma_batch / old_sigma_batch + 1.e-5) + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch)) / (2.0 * torch.square(sigma_batch)) - 0.5, axis=-1)
+                        kl_mean = torch.mean(kl)
+
+                        if kl_mean > self.desired_kl * 2.0:
+                            self.learning_rate = max(1e-5, self.learning_rate / 1.5)
+                        elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
+                            self.learning_rate = min(1e-2, self.learning_rate * 1.5)
+                        
+                        for param_group in self.optimizer.param_groups:
+                            param_group['lr'] = self.learning_rate
+
+                #Estimator Update
+                estimation_loss, swap_loss = self.actor_critic.estimator.update(obs_batch, next_critic_obs_batch, perception_batch, lr=self.learning_rate)
 
                 # Surrogate loss
                 ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))

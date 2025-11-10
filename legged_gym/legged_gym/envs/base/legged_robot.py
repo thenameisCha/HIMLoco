@@ -814,7 +814,7 @@ class LeggedRobot(BaseTask):
                 self.rb_mass[env, N] = rb_props.mass
         self.robot_mass = torch.sum(self.rb_mass, dim=1).unsqueeze(1)
 
-    def _compute_centroidal_dynamics(self, env_ids):
+    def _compute_centroidal_dynamics(self):
         #reset robot-com position
         # local variables used for computation
         # the jacobian from physX gives us spatial velocity of the link-CoM frame about the inertial frame
@@ -822,7 +822,7 @@ class LeggedRobot(BaseTask):
         # transform_from_inertial_to_com transforms the twist in inertial frame to in link-CoM frame.
         # This way, the inertia matrix are about the link-CoM frame, thus much more simple.
         # local variables used for computation
-
+        env_ids = torch.arange(self.num_envs, device=self.device)
         transform = torch.zeros((self.num_envs, 6*self.num_bodies, 6), device=self.device) # the projection matrix
         transform_from_inertial_to_com = torch.zeros((self.num_envs, 6*self.num_bodies, 6*self.num_bodies), device=self.device)
         
