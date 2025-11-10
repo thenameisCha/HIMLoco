@@ -164,6 +164,7 @@ class IGRISCWBAMPCfgPPO( IGRISCWBCfgPPO ):
 class IGRISCAMPIMCfg( IGRISCAMPCfg ):
     pass
 class IGRISCAMPIMCfgPPO( IGRISCAMPCfgPPO ):
+    runner_class_name = 'PIMOnPolicyRunner_AMP'
     class runner(IGRISCAMPCfgPPO.runner):
         algorithm_class_name = 'PIMPPO_AMP'
         policy_class_name = 'PIMActorCritic'

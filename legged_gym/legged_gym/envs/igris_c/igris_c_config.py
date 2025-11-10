@@ -540,8 +540,8 @@ class IGRISCWBCfgPPO( IGRISCCfgPPO ):
 
 class IGRISCPIMCfg( IGRISCCfg ):
     pass
-
 class IGRISCPIMCfgPPO( IGRISCCfgPPO ):
+    runner_class_name = 'PIMOnPolicyRunner'
     class runner(IGRISCCfgPPO.runner):
         algorithm_class_name = 'PIMPPO'
         policy_class_name = 'PIMActorCritic'

@@ -36,8 +36,8 @@ import statistics
 from torch.utils.tensorboard import SummaryWriter
 import torch
 
-from rsl_rl.algorithms import PPO, HIMPPO, HIMPPO_AMP
-from rsl_rl.modules import HIMActorCritic
+from rsl_rl.algorithms import PPO, HIMPPO, HIMPPO_AMP, PIMPPO, PIMPPO_AMP
+from rsl_rl.modules import HIMActorCritic, PIMActorCritic
 from rsl_rl.env import VecEnv
 import wandb
 from rsl_rl.algorithms.amp_discriminator import AMPDiscriminator
@@ -515,3 +515,172 @@ class HIMOnPolicyRunner_AMP( HIMOnPolicyRunner ):
                 wandb_dict['Train/Mean_episode_style_reward'] = statistics.mean(locs['amprewbuffer']) / self.env.dt               
                 wandb_dict['Train/mean_episode_length_t'] = statistics.mean(locs['lenbuffer']) * self.env.dt
                 wandb.log(wandb_dict)
+
+class PIMOnPolicyRunner( HIMOnPolicyRunner ):
+    def learn(self, num_learning_iterations, init_at_random_ep_len=False):
+        # initialize writer
+        if self.log_dir is not None and self.writer is None:
+            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        if init_at_random_ep_len:
+            self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
+        obs = self.env.get_observations()
+        privileged_obs = self.env.get_privileged_observations()
+        critic_obs = privileged_obs if privileged_obs is not None else obs
+        obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
+        mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+        mirror_obs, mirror_critic_obs = mirror_obs.to(self.device), mirror_critic_obs.to(self.device)
+        self.alg.actor_critic.train() # switch to train mode (for dropout for example)
+        self.env.normalizer_obs.train()
+
+        ep_infos = []
+        rewbuffer = deque(maxlen=100)
+        lenbuffer = deque(maxlen=100)
+        cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+        cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+
+        tot_iter = self.current_learning_iteration + num_learning_iterations
+        for it in range(self.current_learning_iteration, tot_iter):
+            start = time.time()
+            # Rollout
+            with torch.inference_mode():
+                for i in range(self.num_steps_per_env):
+                    actions = self.alg.act(obs, critic_obs)
+                    self.alg.save_mirror_state(mirror_obs, mirror_critic_obs)
+                    obs, privileged_obs, rewards, dones, infos, termination_ids, extras = self.env.step(actions)
+                    critic_obs = privileged_obs if privileged_obs is not None else obs
+                    obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    termination_ids = termination_ids.to(self.device)
+                    termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
+                    mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+                    mirror_termination_privileged_obs = extras['mirror_termination_privileged_obs'].to(self.device)
+
+                    next_critic_obs = critic_obs.clone().detach()
+                    next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    mirror_next_critic_obs = mirror_critic_obs.clone().detach()
+                    mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
+
+                    self.alg.process_mirror_step(mirror_next_critic_obs)
+                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
+                
+                    if self.log_dir is not None:
+                        # Book keeping
+                        if 'episode' in infos:
+                            ep_infos.append(infos['episode'])
+                        cur_reward_sum += rewards
+                        cur_episode_length += 1
+                        new_ids = (dones > 0).nonzero(as_tuple=False)
+                        rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                        lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
+                        cur_reward_sum[new_ids] = 0
+                        cur_episode_length[new_ids] = 0
+
+                stop = time.time()
+                collection_time = stop - start
+
+                # Learning step
+                start = stop
+                self.alg.compute_returns(critic_obs)
+                
+            loss_dict = self.alg.update()
+            stop = time.time()
+            learn_time = stop - start
+            if self.log_dir is not None:
+                self.log(locals())
+            if it % self.save_interval == 0:
+                self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+            if it%10 == 0:
+                self.log_wandb(locals())
+            ep_infos.clear()
+        
+        self.current_learning_iteration += num_learning_iterations
+        self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
+
+class PIMOnPolicyRunner_AMP( HIMOnPolicyRunner_AMP ):
+    def learn(self, num_learning_iterations, init_at_random_ep_len=False):
+        # initialize writer
+        if self.log_dir is not None and self.writer is None:
+            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        if init_at_random_ep_len:
+            self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
+        obs = self.env.get_observations()
+        privileged_obs = self.env.get_privileged_observations()
+        amp_obs = self.env.get_amp_observations()
+        critic_obs = privileged_obs if privileged_obs is not None else obs
+        obs, critic_obs, amp_obs = obs.to(self.device), critic_obs.to(self.device), amp_obs.to(self.device)
+        mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+        mirror_obs, mirror_critic_obs = mirror_obs.to(self.device), mirror_critic_obs.to(self.device)
+        self.alg.actor_critic.train() # switch to train mode (for dropout for example)
+        self.alg.discriminator.train()
+
+        ep_infos = []
+        rewbuffer = deque(maxlen=100)
+        lenbuffer = deque(maxlen=100)
+        amprewbuffer = deque(maxlen=100)
+        cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+        cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+
+        tot_iter = self.current_learning_iteration + num_learning_iterations
+        for it in range(self.current_learning_iteration, tot_iter):
+            start = time.time()
+            # Rollout
+            with torch.inference_mode():
+                for i in range(self.num_steps_per_env):
+                    actions = self.alg.act(obs, critic_obs)
+                    self.alg.save_mirror_state(mirror_obs, mirror_critic_obs)
+                    self.alg.save_amp_obs(amp_obs)
+                    obs, privileged_obs, rewards, dones, infos, termination_ids, extras = self.env.step(actions)
+                    critic_obs = privileged_obs if privileged_obs is not None else obs
+                    next_amp_obs = self.env.get_amp_observations()
+                    obs, critic_obs, next_amp_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), next_amp_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    termination_ids = termination_ids.to(self.device)
+                    termination_privileged_obs = extras['termination_privileged_obs'].to(self.device)
+                    termination_amp_obs = extras['termination_amp_obs'].to(self.device)
+                    mirror_obs, mirror_critic_obs = self.env.get_mirror_observations()
+                    mirror_termination_privileged_obs = extras['mirror_termination_privileged_obs'].to(self.device)
+
+                    next_critic_obs = critic_obs.clone().detach()
+                    next_critic_obs[termination_ids] = termination_privileged_obs.clone().detach()
+                    mirror_next_critic_obs = mirror_critic_obs.clone().detach()
+                    mirror_next_critic_obs[termination_ids] = mirror_termination_privileged_obs.clone().detach()
+                    next_amp_obs_with_term = next_amp_obs.clone().detach()
+                    next_amp_obs_with_term[termination_ids] = termination_amp_obs
+
+                    rewards, amp_rewards, _ = self.alg.discriminator.predict_amp_reward(
+                        amp_obs, next_amp_obs_with_term, rewards)
+                    amp_obs = next_amp_obs.clone()
+                    self.alg.process_mirror_step(mirror_next_critic_obs)
+                    self.alg.process_env_step(rewards, dones, infos, next_critic_obs)
+                    self.alg.store_amp_transition(next_amp_obs_with_term)
+                
+                    if self.log_dir is not None:
+                        # Book keeping
+                        if 'episode' in infos:
+                            ep_infos.append(infos['episode'])
+                        cur_reward_sum += rewards
+                        cur_episode_length += 1
+                        new_ids = (dones > 0).nonzero(as_tuple=False)
+                        rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                        lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
+                        amprewbuffer.extend(amp_rewards.cpu().numpy().tolist())
+                        cur_reward_sum[new_ids] = 0
+                        cur_episode_length[new_ids] = 0
+
+                stop = time.time()
+                collection_time = stop - start
+
+                # Learning step
+                start = stop
+                self.alg.compute_returns(critic_obs)
+                
+            loss_dict = self.alg.update()
+            stop = time.time()
+            learn_time = stop - start
+            if self.log_dir is not None:
+                self.log(locals())
+            if it % self.save_interval == 0:
+                self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
+            if it%10 == 0:
+                self.log_wandb(locals())
+            ep_infos.clear()
+        self.current_learning_iteration += num_learning_iterations
+        self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
