@@ -304,7 +304,7 @@ class IGRISCCfgPPO(LeggedRobotCfgPPO):
 class IGRISCWBCfg( IGRISCCfg ):
     class env(IGRISCCfg.env):
         num_one_step_observations = 78
-        num_observations = num_one_step_observations * 6
+        num_observations = num_one_step_observations * 10
         num_one_step_privileged_obs = 78 + 3 + 3 + 187 # additional: base_lin_vel, external_forces, scan_dots
         num_privileged_obs = num_one_step_privileged_obs * 1 # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 23
@@ -315,18 +315,18 @@ class IGRISCWBCfg( IGRISCCfg ):
     class init_state(IGRISCCfg.init_state):
         default_joint_angles = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": -0.1,
+            "Joint_Hip_Pitch_Left": -0.45,
             "Joint_Hip_Roll_Left": 0.0,
             "Joint_Hip_Yaw_Left": 0.,
-            "Joint_Knee_Pitch_Left": 0.3,
-            "Joint_Ankle_Pitch_Left": -0.2,
+            "Joint_Knee_Pitch_Left": 0.75,
+            "Joint_Ankle_Pitch_Left": -0.38,
             "Joint_Ankle_Roll_Left": 0.0,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": -0.1,
+            "Joint_Hip_Pitch_Right": -0.45,
             "Joint_Hip_Roll_Right": 0.0,
             "Joint_Hip_Yaw_Right": 0.0,
-            "Joint_Knee_Pitch_Right": 0.3,
-            "Joint_Ankle_Pitch_Right": -0.2,
+            "Joint_Knee_Pitch_Right": 0.75,
+            "Joint_Ankle_Pitch_Right": -0.38,
             "Joint_Ankle_Roll_Right": 0.0,
             # Waist + Neck (5)
             "Joint_Waist_Yaw": 0.0,
@@ -442,7 +442,11 @@ class IGRISCWBCfg( IGRISCCfg ):
             1., 1., 1., 1.,
             1., 1., 1., 1.,
         ]
-    
+
+    class rewards( IGRISCCfg.rewards ):
+        class scales( IGRISCCfg.rewards.scales ):
+            centroidal_momentum = 1.
+
     class asset(IGRISCCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/igris/xml/igris_c_v2_wholebody.xml' 
         armature = [
@@ -523,7 +527,6 @@ class IGRISCWBCfg( IGRISCCfg ):
 
 class IGRISCWBCfgPPO( IGRISCCfgPPO ):
     class algorithm(IGRISCCfgPPO.algorithm):
-        entropy_coef = 0.005
         # symmetry loss
         symmetry_cfg = {
             'enforce_symmetry' : True,
