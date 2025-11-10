@@ -131,7 +131,7 @@ class LeggedRobotCfg(BaseConfig):
 
     class domain_rand:
         randomize_payload_mass = True
-        payload_mass_range = [-2, 4]
+        payload_mass_range = [-5., 5.]
 
         randomize_com_displacement = True
         com_displacement_range = [-0.03, 0.03]
@@ -152,7 +152,7 @@ class LeggedRobotCfg(BaseConfig):
         initial_joint_pos_range = [0.6, 1.4]
         
         disturbance = True
-        disturbance_range = [-30.0, 30.0]
+        disturbance_range = [-50.0, 50.0]
         disturbance_interval = 8
         
         push_robots = True

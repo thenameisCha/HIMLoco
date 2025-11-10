@@ -10,6 +10,7 @@ from isaacgym.torch_utils import *
 class IGRISC(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        self.debug_viz = False
 
     def get_current_obs(self):
         current_obs = torch.cat((   
@@ -34,6 +35,12 @@ class IGRISC(LeggedRobot):
         mirror_current_obs = self._mirror_observations(current_obs)
         return current_obs, mirror_current_obs
     
+    def reset_idx(self, env_ids):
+        self.torques_buf[:, env_ids, :] = 0.
+        if self.cfg.domain_rand.torque_delay:
+            self.torques_delay_steps[env_ids] = torch.randint(int(self.cfg.domain_rand.minimum_delay/self.cfg.sim.dt), self.cfg.control.decimation, (len(env_ids), ), device=self.device)
+        return super().reset_idx(env_ids)
+
     def _mirror_observations(self, obs):
         num_waist = self.cfg.env.num_waist
         num_legs = self.cfg.env.num_lower_actions
@@ -291,6 +298,8 @@ class IGRISC(LeggedRobot):
     def _init_buffers(self):
         self.target_raibert_footholds = torch.zeros((self.num_envs, 3), device=self.device)
         self.standstill_flag = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
+        self.torques_buf = torch.zeros((self.cfg.control.decimation, self.num_envs, self.num_actions), device=self.device)
+        self.torques_delay_steps = torch.zeros((self.num_envs, ), device=self.device, dtype=torch.long)
         return super()._init_buffers()
 
     def _resample_commands(self, env_ids):
@@ -320,6 +329,34 @@ class IGRISC(LeggedRobot):
             self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1])
             self.commands[:, 2] *= (torch.norm(self.commands[:, 0:1], dim=1) < 0.6)
             self.commands[:, 2] *= (self.commands[:, 2].abs() > 0.2)
+
+    def _compute_torques(self, actions):
+        """ Compute torques from actions.
+            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
+            [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
+
+        Args:
+            actions (torch.Tensor): Actions
+
+        Returns:
+            [torch.Tensor]: Torques sent to the simulation
+        """
+        #pd controller
+        actions_scaled = actions * self.action_scale
+        self.joint_pos_target = self.default_dof_pos + actions_scaled
+
+        control_type = self.cfg.control.control_type
+        if control_type=="P":
+            torques = self.p_gains * self.Kp_factors * (self.joint_pos_target - self.dof_pos) - self.d_gains * self.Kd_factors * self.dof_vel
+        elif control_type=="V":
+            torques = self.p_gains*(actions_scaled - self.dof_vel) - self.d_gains*(self.dof_vel - self.last_dof_vel)/self.sim_params.dt
+        elif control_type=="T":
+            torques = actions_scaled
+        else:
+            raise NameError(f"Unknown controller type: {control_type}")
+        self.torques_buf[:-1] = self.torques_buf.clone()[1:]
+        self.torques_buf[-1] = torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
+        return self.torques_buf[-self.torques_delay_steps-1, torch.arange(self.num_envs), :]
 
     #------------ reward functions----------------
 

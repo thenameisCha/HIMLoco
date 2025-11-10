@@ -15,18 +15,18 @@ class IGRISCCfg( LeggedRobotCfg ):
     class init_state(LeggedRobotCfg.init_state):
         default_joint_angles = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": -0.1,
+            "Joint_Hip_Pitch_Left": -0.45,
             "Joint_Hip_Roll_Left": 0.0,
             "Joint_Hip_Yaw_Left": 0.,
-            "Joint_Knee_Pitch_Left": 0.3,
-            "Joint_Ankle_Pitch_Left": -0.2,
+            "Joint_Knee_Pitch_Left": 0.75,
+            "Joint_Ankle_Pitch_Left": -0.38,
             "Joint_Ankle_Roll_Left": 0.0,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": -0.1,
+            "Joint_Hip_Pitch_Right": -0.45,
             "Joint_Hip_Roll_Right": 0.0,
             "Joint_Hip_Yaw_Right": 0.0,
-            "Joint_Knee_Pitch_Right": 0.3,
-            "Joint_Ankle_Pitch_Right": -0.2,
+            "Joint_Knee_Pitch_Right": 0.75,
+            "Joint_Ankle_Pitch_Right": -0.38,
             "Joint_Ankle_Roll_Right": 0.0,
             # Waist + Neck (5)
             # "Joint_Waist_Yaw": 0.0,
@@ -223,6 +223,12 @@ class IGRISCCfg( LeggedRobotCfg ):
             # 0.356
         ]
 
+    class domain_rand(LeggedRobotCfg.domain_rand):
+        delay = True
+
+        torque_delay = False
+        minimum_torque_delay = 0.005
+
     class rewards( LeggedRobotCfg.rewards ):
         base_height_target = 0.93
         soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
@@ -259,7 +265,7 @@ class IGRISCCfg( LeggedRobotCfg ):
         heading_command = True # if true: compute ang vel command from heading error
         class ranges:
             lin_vel_x = [-0.8, 0.8] # min max [m/s]
-            lin_vel_y = [-0.3, 0.3]   # min max [m/s]
+            lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-1., 1.]    # min max [rad/s]
             heading = [-3.14, 3.14]
 

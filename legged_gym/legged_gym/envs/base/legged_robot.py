@@ -246,7 +246,7 @@ class LeggedRobot(BaseTask):
         if (self.common_step_counter % self.cfg.domain_rand.props_interval == 0):
             self.refresh_actor_dof_props(env_ids)
             self.refresh_actor_rigid_shape_props(env_ids)
-        
+            
         # fill extras
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -476,7 +476,7 @@ class LeggedRobot(BaseTask):
             props[0].mass = self.default_rigid_body_mass[0] + self.payload[env_id, 0]
             
         if self.cfg.domain_rand.randomize_com_displacement:
-            props[0].com = gymapi.Vec3(self.com_displacement[env_id, 0], self.com_displacement[env_id, 1], self.com_displacement[env_id, 2])
+            props[0].com += gymapi.Vec3(self.com_displacement[env_id, 0], self.com_displacement[env_id, 1], self.com_displacement[env_id, 2])
 
         if self.cfg.domain_rand.randomize_link_mass:
             rng = self.cfg.domain_rand.link_mass_range
