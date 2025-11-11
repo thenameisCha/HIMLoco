@@ -12,29 +12,6 @@ class IGRISC(LeggedRobot):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.debug_viz = False
 
-    def get_current_obs(self):
-        current_obs = torch.cat((   
-                                    self.commands[:, :3] * self.commands_scale,
-                                    self.base_ang_vel  * self.obs_scales.ang_vel,
-                                    self.projected_gravity,
-                                    (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                    self.dof_vel * self.obs_scales.dof_vel,
-                                    self.actions
-                                    ),dim=-1)
-        # add noise if needed
-        if self.add_noise:
-            current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[0:(9 + 3 * self.num_actions)]
-
-        # add perceptive inputs if not blind
-        current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel, self.disturbance[:, 0, :]), dim=-1)
-        if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 1. - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements 
-            heights += (2 * torch.rand_like(heights) - 1) * self.noise_scale_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
-            current_obs = torch.cat((current_obs, heights), dim=-1)
-
-        mirror_current_obs = self._mirror_observations(current_obs)
-        return current_obs, mirror_current_obs
-    
     def reset_idx(self, env_ids):
         self.torques_buf[:, env_ids, :] = 0.
         if self.cfg.domain_rand.torque_delay:

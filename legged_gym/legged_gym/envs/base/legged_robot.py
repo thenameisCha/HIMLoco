@@ -243,7 +243,7 @@ class LeggedRobot(BaseTask):
         if self.cfg.domain_rand.randomize_motor_strength:
             self.motor_strength_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.bias.add_bias:
-            self._get_bias_scale_vec(env_ids)         
+            self._update_bias_vec(env_ids)  
 
         if (self.common_step_counter % self.cfg.domain_rand.props_interval == 0):
             self.refresh_actor_dof_props(env_ids)
@@ -309,14 +309,14 @@ class LeggedRobot(BaseTask):
         if self.add_noise:
             current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[0:(9 + 3 * self.num_actions)]
         if self.add_bias:
-            current_obs += self.bias_vec[0:(9 + 3 * self.num_actions)]
+            current_obs += self.bias_vec[:, 0:(9 + 3 * self.num_actions)]
 
         # add perceptive inputs if not blind
         current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel, self.disturbance[:, 0, :]), dim=-1)
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 1. - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements 
             heights += (2 * torch.rand_like(heights) - 1) * self.noise_scale_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
-            heights += self.bias_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
+            heights += self.bias_vec[:, (9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
             current_obs = torch.cat((current_obs, heights), dim=-1)
 
         mirror_current_obs = self._mirror_observations(current_obs)
