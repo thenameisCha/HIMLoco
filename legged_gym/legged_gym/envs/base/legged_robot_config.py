@@ -219,7 +219,16 @@ class LeggedRobotCfg(BaseConfig):
             lin_vel = 0.1
             ang_vel = 0.2
             gravity = 0.05
-            height_measurements = 0.1
+            height_measurements = 0.02
+
+    class bias:
+        add_bias = True
+        bias_level = 1.0 # scales other values
+        class bias_scales:
+            dof_pos = 0.05
+            ang_vel = 0.05
+            gravity = 0.02
+            height_measurements = 0.05
 
     # viewer camera:
     class viewer:

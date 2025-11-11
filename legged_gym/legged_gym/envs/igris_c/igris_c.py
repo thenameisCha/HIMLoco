@@ -359,6 +359,38 @@ class IGRISC(LeggedRobot):
         self.torques_buf[:-1] = self.torques_buf.clone()[1:]
         self.torques_buf[-1] = torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
         return self.torques_buf[-self.torques_delay_steps-1, torch.arange(self.num_envs), :]
+    
+    def _get_bias_scale_vec(self, cfg):
+        """ Sets a vector used to scale the bias added to the observations.
+            [NOTE]: Must be adapted when changing the observations structure
+
+        Args:
+            cfg (Dict): Environment config file
+
+        Returns:
+            [torch.Tensor]: Vector of scales used to multiply a gaussian distribution in N(0, 1)
+        """
+        # bias_vec = torch.zeros_like(self.obs_buf[0])\
+        if self.cfg.terrain.measure_heights:
+            bias_vec = torch.zeros(9 + 3*self.num_actions + 187, device=self.device)
+        else:
+            bias_vec = torch.zeros(9 + 3*self.num_actions, device=self.device)
+        self.add_bias = self.cfg.bias.add_bias
+        bias_scales = self.cfg.bias.bias_scales
+        bias_level = self.cfg.bias.bias_level
+        bias_vec[0:3] = 0. # commands
+        bias_vec[3:6] = bias_scales.ang_vel * bias_level * self.obs_scales.ang_vel
+        bias_vec[6:9] = bias_scales.gravity * bias_level
+        bias_vec[9:(9 + self.num_actions)] = bias_scales.dof_pos * bias_level * self.obs_scales.dof_pos
+        bias_vec[9:11] *= 2. # waist dof pos
+        bias_vec[15:17] *= 2. # ankle dof pos
+        bias_vec[21:23] *= 2. # ankle dof pos
+        bias_vec[(9 + self.num_actions):(9 + 2 * self.num_actions)] = 0. # dof vel
+        bias_vec[(9 + 2 * self.num_actions):(9 + 3 * self.num_actions)] = 0. # previous actions
+        if self.cfg.terrain.measure_heights:
+            bias_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions + 187)] = bias_scales.height_measurements* bias_level * self.obs_scales.height_measurements
+        #bias_vec[232:] = 0
+        return bias_vec
 
     #------------ reward functions----------------
 

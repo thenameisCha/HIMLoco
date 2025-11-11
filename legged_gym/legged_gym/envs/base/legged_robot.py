@@ -242,6 +242,8 @@ class LeggedRobot(BaseTask):
             self.Kd_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.domain_rand.randomize_motor_strength:
             self.motor_strength_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (len(env_ids), 1), device=self.device)
+        if self.cfg.bias.add_bias:
+            self._get_bias_scale_vec(env_ids)         
 
         if (self.common_step_counter % self.cfg.domain_rand.props_interval == 0):
             self.refresh_actor_dof_props(env_ids)
@@ -306,12 +308,15 @@ class LeggedRobot(BaseTask):
         # add noise if needed
         if self.add_noise:
             current_obs += (2 * torch.rand_like(current_obs) - 1) * self.noise_scale_vec[0:(9 + 3 * self.num_actions)]
+        if self.add_bias:
+            current_obs += self.bias_vec[0:(9 + 3 * self.num_actions)]
 
         # add perceptive inputs if not blind
         current_obs = torch.cat((current_obs, self.base_lin_vel * self.obs_scales.lin_vel, self.disturbance[:, 0, :]), dim=-1)
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 1. - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements 
             heights += (2 * torch.rand_like(heights) - 1) * self.noise_scale_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
+            heights += self.bias_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions+187)]
             current_obs = torch.cat((current_obs, heights), dim=-1)
 
         mirror_current_obs = self._mirror_observations(current_obs)
@@ -685,7 +690,44 @@ class LeggedRobot(BaseTask):
             noise_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions + 187)] = noise_scales.height_measurements* noise_level * self.obs_scales.height_measurements
         #noise_vec[232:] = 0
         return noise_vec
+    
+    def _get_bias_scale_vec(self, cfg):
+        """ Sets a vector used to scale the bias added to the observations.
+            [NOTE]: Must be adapted when changing the observations structure
 
+        Args:
+            cfg (Dict): Environment config file
+
+        Returns:
+            [torch.Tensor]: Vector of scales used to multiply a gaussian distribution in N(0, 1)
+        """
+        # bias_vec = torch.zeros_like(self.obs_buf[0])\
+        if self.cfg.terrain.measure_heights:
+            bias_vec = torch.zeros(9 + 3*self.num_actions + 187, device=self.device)
+        else:
+            bias_vec = torch.zeros(9 + 3*self.num_actions, device=self.device)
+        self.add_bias = self.cfg.bias.add_bias
+        bias_scales = self.cfg.bias.bias_scales
+        bias_level = self.cfg.bias.bias_level
+        bias_vec[0:3] = 0. # commands
+        bias_vec[3:6] = bias_scales.ang_vel * bias_level * self.obs_scales.ang_vel
+        bias_vec[6:9] = bias_scales.gravity * bias_level
+        bias_vec[9:(9 + self.num_actions)] = bias_scales.dof_pos * bias_level * self.obs_scales.dof_pos
+        bias_vec[(9 + self.num_actions):(9 + 2 * self.num_actions)] = 0. # dof vel
+        bias_vec[(9 + 2 * self.num_actions):(9 + 3 * self.num_actions)] = 0. # previous actions
+        if self.cfg.terrain.measure_heights:
+            bias_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions + 187)] = bias_scales.height_measurements* bias_level * self.obs_scales.height_measurements
+        #bias_vec[232:] = 0
+        return bias_vec
+
+    def _update_bias_vec(self, env_ids):
+        """ Updates the bias vector for selected environments
+
+        Args:
+            env_ids (List[int]): Environment ids
+        """
+        if self.add_bias:
+            self.bias_vec = self.bias_scale_vec * (2*torch.rand((self.num_envs, self.bias_scale_vec.shape[0]), device=self.device)-1)
     #----------------------------------------
     def _init_buffers(self):
         """ Initialize torch tensors which will contain simulation states and processed quantities
@@ -724,6 +766,8 @@ class LeggedRobot(BaseTask):
         self.common_step_counter = 0
         self.extras = {}
         self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
+        self.bias_scale_vec = self._get_bias_scale_vec(self.cfg)
+        self.bias_vec = torch.zeros((self.num_envs, self.bias_scale_vec.shape[0]), device=self.device)
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.forward_vec = to_torch([1., 0., 0.], device=self.device).repeat((self.num_envs, 1))
         self.torques = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
