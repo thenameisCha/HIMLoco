@@ -5,159 +5,13 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym.envs.igris_c.igris_c_config import IGRISCCfg
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi
-from legged_gym.envs.igris_c.parallel4barlink import Parallel4BarLinkTorch, quat_to_rotmat
 from isaacgym.torch_utils import *
 
 class IGRISC(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.debug_viz = False
-        r_a_i = torch.tensor([
-            [0., 0.],
-            [0.09050, -0.09050],
-            [-0.04, -0.04]
-        ], device=self.device)
-        r_b_i = torch.tensor([
-            [-0.05167, -0.05167],
-            [0.09050, -0.09050],
-            [-0.04587, -0.04587]
-        ], device=self.device)
-        r_c_i = torch.tensor([
-            [-0.05, -0.05],
-            [0.09400, -0.09400],
-            [0.014, 0.014]
-        ], device=self.device)
-        motor_angles_min = torch.tensor([-0.75, -0.75], device=self.device)
-        motor_angles_max = torch.tensor([1.5, 1.5], device=self.device)
-        joint_angles_min = torch.tensor([-0.5, -1.], device=self.device)
-        joint_angles_max = torch.tensor([0.5, 0.4], device=self.device)
-        self.p_link_waist_ = Parallel4BarLinkTorch(r_a_i, r_b_i, r_c_i, 
-                                              motor_angles_min=motor_angles_min, motor_angles_max=motor_angles_max, joint_angles_min=joint_angles_min, joint_angles_max=joint_angles_max,
-                                              device=self.device)
-
-    def _compute_torques(self, actions):
-        """ Compute torques from actions.
-            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
-            [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
-
-        Args:
-            actions (torch.Tensor): Actions
-
-        Returns:
-            [torch.Tensor]: Torques sent to the simulation
-        """
-        #pd controller
-        actions_scaled = actions * self.action_scale
-        self.joint_pos_target = self.default_dof_pos + actions_scaled
-
-        # step_env = self.episode_length_buf > 4/self.dt
-        # self.joint_pos_target[:] = self.default_dof_pos[:]
-        # self.joint_pos_target[step_env] = self.default_dof_pos + torch.tensor([-0.,-0.,0.,0.2,-0.,0.,0.,0.,0.,0.,0.,0.,0.,0.], device=self.device).unsqueeze(dim=0)
-
-        control_type = self.cfg.control.control_type
-        if control_type=="P":
-            torques = self.p_gains * self.Kp_factors * (self.joint_pos_target - self.dof_pos) - self.d_gains * self.Kd_factors * self.dof_vel
-            # torques = self._process_torques(torques)
-        elif control_type=="V":
-            torques = self.p_gains*(actions_scaled - self.dof_vel) - self.d_gains*(self.dof_vel - self.last_dof_vel)/self.sim_params.dt
-        elif control_type=="T":
-            torques = actions_scaled
-        else:
-            raise NameError(f"Unknown controller type: {control_type}")
-        return torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
     
-    def _process_torques(self, torques):
-        torques[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist] = self._joint2motor(
-                self.dof_pos[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist],
-                self.dof_vel[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist],
-                self.joint_pos_target[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist],
-                (self.p_gains*self.Kp_factors)[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist],
-                (self.d_gains*self.Kd_factors)[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist]
-            )
-        return torques
-    
-    def _joint2motor(self, joint_pos, joint_vel, joint_pos_target, motor_p_gains, motor_d_gains):
-        """
-        joint_pos, joint_vel, joint_pos_target: (B,2) for waist joints [q0,q1]
-        motor_p_gains, motor_d_gains: (B,2) or (1,2)
-
-        Returns:
-            joint_torque: (B,2) joint-level torques for those waist DOFs
-        """
-        # 1) Refresh sim state
-        self.gym.refresh_jacobian_tensors(self.sim)
-        self.gym.refresh_rigid_body_state_tensor(self.sim)
-
-        B = joint_pos.shape[0]
-        device = self.device
-
-        # 2) Waist pose (make sure this index is correct for your asset)
-        waist_body_index = 3  # set once from body names
-
-        waist_pos  = self.rb_states[:, waist_body_index, 0:3]  # (B,3)
-        waist_quat = self.rb_states[:, waist_body_index, 3:7]  # (B,4)
-        R_waist = quat_to_rotmat(waist_quat)                   # (B,3,3)
-
-        # 3) C positions in base frame (using *local* C offset in waist frame)
-        # This should be r_c_offset_local from your C++:
-        #   r_c_offset_local[:, i] = r_c_init[:, i] - p_link_2_pos
-        # For your minimal waist model, r_c_init == r_c_offset_local is OK,
-        # but in general, compute it explicitly once from your RBDL or MuJoCo model.
-        r_c_offset_local = self.p_link_waist_.r_c_offset_local   # (3,2)
-        r_c = torch.zeros(B, 3, 2, device=device, dtype=torch.float32)
-
-        for i in range(2):
-            offset_i = r_c_offset_local[:, i].view(1, 3, 1)            # (1,3,1)
-            offset_world = torch.bmm(R_waist, offset_i.expand(B, -1, -1))  # (B,3,1)
-            r_c[:, :, i] = waist_pos + offset_world.squeeze(-1)       # (B,3)
-
-        # 4) Jacobian slice: map local joint indices -> global DOF indices
-        # local waist indices in dof_pos / dof_vel (what you're passing in here)
-        w0_local = self.cfg.env.num_waist - 2
-        w1_local = self.cfg.env.num_waist - 1
-
-        # global DOF indices in the Jacobian (6 root DOFs first)
-        w0_global = 6 + self.cfg.env.action_offset + w0_local
-        w1_global = 6 + self.cfg.env.action_offset + w1_local
-        waist_dof_global_indices = torch.tensor([w0_global, w1_global],
-                                                device=device,
-                                                dtype=torch.long)
-
-        # self.jacobian shape: (B, num_bodies, 6, 6+N_joints)
-        jac_waist = self.jacobian[:, waist_body_index, :, waist_dof_global_indices]  # (B,6,2)
-
-        # Swap [angular; linear] → [linear; angular] to match your C++ code
-        jac_joint = torch.cat(
-            [jac_waist[:, 3:6, :],   # linear
-            jac_waist[:, 0:3, :]],  # angular
-            dim=1
-        )  # (B,6,2)
-
-        # 5) Motor IK (current & command)
-        motor_pos_cmd = self.p_link_waist_.ik(joint_pos_target, r_c)  # (B,2)
-        motor_pos_cur = self.p_link_waist_.ik(joint_pos,        r_c)  # (B,2)
-        print(f'motor pos cmd : {motor_pos_cmd[1]}')
-        print(f'motor pos cur : {motor_pos_cur[1]}')
-        print(f'joint pos cmd : {joint_pos_target[1]}')
-        print(f'joint pos cur : {joint_pos[1]}')
-
-        # 6) J_c and motor velocity
-        J_c = self.p_link_waist_.jac(joint_pos, motor_pos_cur, r_c, jac_joint)  # (B,2,2)
-        motor_vel_cur = torch.bmm(J_c, joint_vel.unsqueeze(-1)).squeeze(-1)     # (B,2)
-
-        # Desired motor velocity = 0 for now
-        motor_vel_cmd = torch.zeros_like(motor_vel_cur)
-
-        # 7) Motor-space PD
-        pos_err = motor_pos_cmd - motor_pos_cur
-        vel_err = motor_vel_cmd - motor_vel_cur
-
-        motor_torque = motor_p_gains * pos_err + motor_d_gains * vel_err   # (B,2)
-
-        # 8) Map back to joint torques: τ_joint = J_cᵀ τ_motor
-        joint_torque = torch.bmm(J_c.transpose(1, 2), motor_torque.unsqueeze(-1)).squeeze(-1)  # (B,2)
-        return joint_torque
-
     def _mirror_observations(self, obs):
         num_waist = self.cfg.env.num_waist
         num_legs = self.cfg.env.num_lower_actions
@@ -446,38 +300,6 @@ class IGRISC(LeggedRobot):
             self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1])
             self.commands[:, 2] *= (torch.norm(self.commands[:, 0:1], dim=1) < 0.6)
             self.commands[:, 2] *= (self.commands[:, 2].abs() > 0.2)
-    
-    def _get_bias_scale_vec(self, cfg):
-        """ Sets a vector used to scale the bias added to the observations.
-            [NOTE]: Must be adapted when changing the observations structure
-
-        Args:
-            cfg (Dict): Environment config file
-
-        Returns:
-            [torch.Tensor]: Vector of scales used to multiply a gaussian distribution in N(0, 1)
-        """
-        # bias_vec = torch.zeros_like(self.obs_buf[0])\
-        if self.cfg.terrain.measure_heights:
-            bias_vec = torch.zeros(9 + 3*self.num_actions + 187, device=self.device)
-        else:
-            bias_vec = torch.zeros(9 + 3*self.num_actions, device=self.device)
-        self.add_bias = self.cfg.bias.add_bias
-        bias_scales = self.cfg.bias.bias_scales
-        bias_level = self.cfg.bias.bias_level
-        bias_vec[0:3] = 0. # commands
-        bias_vec[3:6] = bias_scales.ang_vel * bias_level * self.obs_scales.ang_vel
-        bias_vec[6:9] = bias_scales.gravity * bias_level
-        bias_vec[9:(9 + self.num_actions)] = bias_scales.dof_pos * bias_level * self.obs_scales.dof_pos
-        bias_vec[9:11] *= 2. # waist dof pos
-        bias_vec[15:17] *= 2. # ankle dof pos
-        bias_vec[21:23] *= 2. # ankle dof pos
-        bias_vec[(9 + self.num_actions):(9 + 2 * self.num_actions)] = 0. # dof vel
-        bias_vec[(9 + 2 * self.num_actions):(9 + 3 * self.num_actions)] = 0. # previous actions
-        if self.cfg.terrain.measure_heights:
-            bias_vec[(9 + 3 * self.num_actions):(9 + 3 * self.num_actions + 187)] = bias_scales.height_measurements* bias_level * self.obs_scales.height_measurements
-        #bias_vec[232:] = 0
-        return bias_vec
 
     #------------ reward functions----------------
 

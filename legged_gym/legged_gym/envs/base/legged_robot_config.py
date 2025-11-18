@@ -63,7 +63,7 @@ class LeggedRobotCfg(BaseConfig):
         num_rows= 10 # number of terrain rows (levels)
         num_cols = 20 # number of terrain cols (types)
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, stepping stones, gaps, random]
-        terrain_proportions = [0.1, 0.2, 0.1, 0.2, 0.2, 0.0, 0.0, 0.2]
+        terrain_proportions = [0.2, 0.2, 0.0, 0.2, 0.2, 0.0, 0.0, 0.2]
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
 
@@ -127,7 +127,7 @@ class LeggedRobotCfg(BaseConfig):
         
         damping = []
 
-        friction = []
+        frictionloss = []
 
     class domain_rand:
         randomize_payload_mass = True
@@ -171,8 +171,6 @@ class LeggedRobotCfg(BaseConfig):
         damping_range = [0.6, 1.4]
         randomize_armature = True
         armature_range = [0.8, 1.2]
-        randomize_friction = True
-        friction_range = [0.6, 1.4]
         props_interval = 1000 # ticks
 
     class rewards:
@@ -227,9 +225,9 @@ class LeggedRobotCfg(BaseConfig):
         add_bias = True
         bias_level = 1.0 # scales other values
         class bias_scales:
-            dof_pos = 0.05
-            ang_vel = 0.05
-            gravity = 0.02
+            dof_pos = 0.03
+            ang_vel = 0.03
+            gravity = 0.01
             height_measurements = 0.05
 
     # viewer camera:

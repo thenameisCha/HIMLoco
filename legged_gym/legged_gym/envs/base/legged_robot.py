@@ -237,11 +237,11 @@ class LeggedRobot(BaseTask):
         
          #reset randomized prop
         if self.cfg.domain_rand.randomize_kp:
-            self.Kp_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kp_range[0], self.cfg.domain_rand.kp_range[1], (len(env_ids), self.num_actions), device=self.device)
+            self.Kp_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kp_range[0], self.cfg.domain_rand.kp_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.domain_rand.randomize_kd:
-            self.Kd_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (len(env_ids), self.num_actions), device=self.device)
+            self.Kd_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.domain_rand.randomize_motor_strength:
-            self.motor_strength_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (len(env_ids), self.num_actions), device=self.device)
+            self.motor_strength_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (len(env_ids), 1), device=self.device)
         if self.cfg.bias.add_bias:
             self._update_bias_vec(env_ids)  
 
@@ -421,16 +421,12 @@ class LeggedRobot(BaseTask):
             self.armature_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.armature_range[0], self.cfg.domain_rand.armature_range[1], (len(env_ids), self.num_dofs), device=self.device)
         if self.cfg.domain_rand.randomize_damping:
             self.damping_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.damping_range[0], self.cfg.domain_rand.damping_range[1], (len(env_ids), self.num_dofs), device=self.device)
-        if self.cfg.domain_rand.randomize_friction:
-            self.friction_factors[env_ids] = torch_rand_float(self.cfg.domain_rand.friction_range[0], self.cfg.domain_rand.friction_range[1], (len(env_ids), self.num_dofs), device=self.device)
         armature = (self.default_armature*self.armature_factors[env_ids]).cpu().numpy()
         damping = (self.default_damping*self.damping_factors[env_ids]).cpu().numpy()
-        friction = (self.default_friction*self.friction_factors[env_ids]).cpu().numpy()
         for e, env_id in enumerate(env_ids):
             dof_props = self.gym.get_actor_dof_properties(self.envs[env_id], 0)
             dof_props['armature'] = armature[e]
             dof_props['damping'] = damping[e]
-            dof_props['friction'] = friction[e]
             self.gym.set_actor_dof_properties(self.envs[env_id], 0, dof_props)
 
     def _process_dof_props(self, props, env_id):
@@ -462,10 +458,8 @@ class LeggedRobot(BaseTask):
             self.hard_dof_pos_limits = self.dof_pos_limits.clone() # For actual joint limit computation
             self.default_armature = torch.tensor(self.cfg.asset.armature, device=self.device).unsqueeze(dim=0)
             self.default_damping = torch.tensor(self.cfg.asset.damping, device=self.device).unsqueeze(dim=0)
-            self.default_friction = torch.tensor(self.cfg.asset.friction, device=self.device).unsqueeze(dim=0)
             props['armature'] = self.cfg.asset.armature
             props['damping'] = self.cfg.asset.damping
-            props['friction'] = self.cfg.asset.friction
         return props
     
     def _process_actuator_props(self, props, env_id):
@@ -563,6 +557,7 @@ class LeggedRobot(BaseTask):
         #pd controller
         actions_scaled = actions * self.action_scale
         self.joint_pos_target = self.default_dof_pos + actions_scaled
+
         control_type = self.cfg.control.control_type
         if control_type=="P":
             torques = self.p_gains * self.Kp_factors * (self.joint_pos_target - self.dof_pos) - self.d_gains * self.Kd_factors * self.dof_vel
@@ -822,19 +817,19 @@ class LeggedRobot(BaseTask):
         
         
         #randomize kp, kd, motor strength
-        self.Kp_factors = torch.ones(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.Kd_factors = torch.ones(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
-        self.motor_strength_factors = torch.ones(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
+        self.Kp_factors = torch.ones(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
+        self.Kd_factors = torch.ones(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
+        self.motor_strength_factors = torch.ones(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.payload = torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
         self.com_displacement = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
         self.disturbance = torch.zeros(self.num_envs, self.num_bodies, 3, dtype=torch.float, device=self.device, requires_grad=False)
         
         if self.cfg.domain_rand.randomize_kp:
-            self.Kp_factors = torch_rand_float(self.cfg.domain_rand.kp_range[0], self.cfg.domain_rand.kp_range[1], (self.num_envs, self.num_actions), device=self.device)
+            self.Kp_factors = torch_rand_float(self.cfg.domain_rand.kp_range[0], self.cfg.domain_rand.kp_range[1], (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.randomize_kd:
-            self.Kd_factors = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (self.num_envs, self.num_actions), device=self.device)
+            self.Kd_factors = torch_rand_float(self.cfg.domain_rand.kd_range[0], self.cfg.domain_rand.kd_range[1], (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.randomize_motor_strength:
-            self.motor_strength_factors = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (self.num_envs, self.num_actions), device=self.device)
+            self.motor_strength_factors = torch_rand_float(self.cfg.domain_rand.motor_strength_range[0], self.cfg.domain_rand.motor_strength_range[1], (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.randomize_payload_mass:
             self.payload = torch_rand_float(self.cfg.domain_rand.payload_mass_range[0], self.cfg.domain_rand.payload_mass_range[1], (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.randomize_com_displacement:
@@ -1079,7 +1074,6 @@ class LeggedRobot(BaseTask):
         self.com_displacement = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
         self.armature_factors = torch.ones(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self.damping_factors = torch.ones(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
-        self.friction_factors = torch.ones(self.num_envs, self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         if self.cfg.domain_rand.randomize_payload_mass:
             self.payload = torch_rand_float(self.cfg.domain_rand.payload_mass_range[0], self.cfg.domain_rand.payload_mass_range[1], (self.num_envs, 1), device=self.device)
         if self.cfg.domain_rand.randomize_com_displacement:
@@ -1167,7 +1161,7 @@ class LeggedRobot(BaseTask):
             Default behaviour: draws height measurement points
         """
         # draw height lines
-        if not self.terrain.cfg.measure_heights:
+        if not self.cfg.terrain.measure_heights:
             return
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
