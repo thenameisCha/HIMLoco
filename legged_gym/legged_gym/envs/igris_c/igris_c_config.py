@@ -60,19 +60,19 @@ class IGRISCCfg( LeggedRobotCfg ):
             "Joint_Hip_Roll_Left": 100,
             "Joint_Hip_Yaw_Left": 50.0,
             "Joint_Knee_Pitch_Left": 100,
-            "Joint_Ankle_Pitch_Left": 50,
-            "Joint_Ankle_Roll_Left": 50,
+            "Joint_Ankle_Pitch_Left": 45,
+            "Joint_Ankle_Roll_Left": 42,
             # Right leg (6)
             "Joint_Hip_Pitch_Right": 100,
             "Joint_Hip_Roll_Right": 100,
             "Joint_Hip_Yaw_Right": 50.0,
             "Joint_Knee_Pitch_Right": 100,
-            "Joint_Ankle_Pitch_Right": 50,
-            "Joint_Ankle_Roll_Right": 50,
+            "Joint_Ankle_Pitch_Right": 45,
+            "Joint_Ankle_Roll_Right": 42,
             # Waist + Neck (5)
             # "Joint_Waist_Yaw": 100.0,
-            "Joint_Waist_Roll": 50.0,
-            "Joint_Waist_Pitch": 50.0,
+            "Joint_Waist_Roll": 150.0,
+            "Joint_Waist_Pitch": 80.0,
             # "Joint_Neck_Yaw": 30.0,
             # "Joint_Neck_Pitch": 30.0,
             # # Left arm (7)
@@ -94,23 +94,23 @@ class IGRISCCfg( LeggedRobotCfg ):
         }
         damping = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": 4.0,
-            "Joint_Hip_Roll_Left": 4.0,
-            "Joint_Hip_Yaw_Left": 2.0,
-            "Joint_Knee_Pitch_Left": 4.0,
-            "Joint_Ankle_Pitch_Left": 2.5,
-            "Joint_Ankle_Roll_Left": 2.5,
+            "Joint_Hip_Pitch_Left": 27,
+            "Joint_Hip_Roll_Left": 29,
+            "Joint_Hip_Yaw_Left": 6.0,
+            "Joint_Knee_Pitch_Left": 10.0,
+            "Joint_Ankle_Pitch_Left": 3.,
+            "Joint_Ankle_Roll_Left": 3.,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": 4.0,
-            "Joint_Hip_Roll_Right": 4.0,
-            "Joint_Hip_Yaw_Right": 2.0,
-            "Joint_Knee_Pitch_Right": 4.0,
-            "Joint_Ankle_Pitch_Right": 2.5,
-            "Joint_Ankle_Roll_Right": 2.5,
+            "Joint_Hip_Pitch_Right": 27,
+            "Joint_Hip_Roll_Right": 29,
+            "Joint_Hip_Yaw_Right": 6.0,
+            "Joint_Knee_Pitch_Right": 10.0,
+            "Joint_Ankle_Pitch_Right": 3.,
+            "Joint_Ankle_Roll_Right": 3.,
             # # Waist + Neck (5)
             # "Joint_Waist_Yaw": 2.0,
-            "Joint_Waist_Roll": 2.0,
-            "Joint_Waist_Pitch": 2.0,
+            "Joint_Waist_Roll": 60.0,
+            "Joint_Waist_Pitch": 45.0,
             # "Joint_Neck_Yaw": 1.0,
             # "Joint_Neck_Pitch": 1.0,
             # # Left arm (7)
@@ -168,10 +168,10 @@ class IGRISCCfg( LeggedRobotCfg ):
         
         damping = [
                 # 1.e-6, 
-                1.e-6, 
-                1.e-6,
-                1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6,
-                1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6, 1.e-6,
+                1.e-8, 
+                1.e-8,
+                1.e-8, 1.e-8, 1.e-8, 1.e-8, 1.e-8, 1.e-8,
+                1.e-8, 1.e-8, 1.e-8, 1.e-8, 1.e-8, 1.e-8,
                 # 1.e-6, 
                 # 1.e-6, 
                 # 1.e-6, 
@@ -184,51 +184,21 @@ class IGRISCCfg( LeggedRobotCfg ):
                 # 0.1, 0.1, 0.1
             ] # 0.1
         
-        frictionloss = [
-            # 0.54,
-            0.54,
-            0.54,
-            
-            2.4,
-            0.812,
-            0.54,
-            2.4,
-            1.81,
-            1.81,
+        friction = [
+            # 0.,
+            0., 0.,
+            0., 0., 0., 0., 0., 0.,
+            0., 0., 0., 0., 0., 0.,
+            # 0., 0., 0., 0., 
+            # 0., 0., 0.,
+            # 0., 0., 0., 0., 
+            # 0., 0., 0.,
+            # 0., 0.
 
-            2.4,
-            0.812,
-            0.54,
-            2.4,
-            1.81,
-            1.81,
-
-            # 0.54,
-            # 0.54,
-            # 0.54,
-            # 0.54,
-            # 0.264,
-            # 0.264,
-            # 0.264,
-
-            # 0.54,
-            # 0.54,
-            # 0.54,
-            # 0.54,
-            # 0.264,
-            # 0.264,
-            # 0.264,
-
-            # 0.356,
-            # 0.356
         ]
 
     class domain_rand(LeggedRobotCfg.domain_rand):
         delay = True
-
-        torque_delay = False
-        minimum_torque_delay = 0.005
-        maximum_torque_delay = 0.02
 
     class rewards( LeggedRobotCfg.rewards ):
         base_height_target = 0.93
@@ -487,43 +457,17 @@ class IGRISCWBCfg( IGRISCCfg ):
                 # 0.1, 0.1, 0.1
             ] # 0.1
         
-        frictionloss = [
-            0.54,
-            0.54,
-            0.54,
-            
-            2.4,
-            0.812,
-            0.54,
-            2.4,
-            1.81,
-            1.81,
+        friction = [
+            0.,
+            0., 0.,
+            0., 0., 0., 0., 0., 0.,
+            0., 0., 0., 0., 0., 0.,
+            0., 0., 0., 0., 
+            # 0., 0., 0.,
+            0., 0., 0., 0., 
+            # 0., 0., 0.,
+            # 0., 0.
 
-            2.4,
-            0.812,
-            0.54,
-            2.4,
-            1.81,
-            1.81,
-
-            0.54,
-            0.54,
-            0.54,
-            0.54,
-            # 0.264,
-            # 0.264,
-            # 0.264,
-
-            0.54,
-            0.54,
-            0.54,
-            0.54,
-            # 0.264,
-            # 0.264,
-            # 0.264,
-
-            # 0.356,
-            # 0.356
         ]
 
 class IGRISCWBCfgPPO( IGRISCCfgPPO ):

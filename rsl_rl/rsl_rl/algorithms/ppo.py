@@ -139,6 +139,7 @@ class PPO:
     def update(self):
         mean_value_loss = 0
         mean_surrogate_loss = 0
+        mean_smooth_loss = 0
         mean_mirror_loss = 0
         if self.actor_critic.is_recurrent:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
@@ -235,7 +236,8 @@ class PPO:
                 else:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
-                loss += surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+                loss += surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() +\
+                self.smooth_coef * gradient_penalty_loss
 
                 # Gradient step
                 self.optimizer.zero_grad()
@@ -245,18 +247,19 @@ class PPO:
                 if not self.actor_critic.fixed_std and self.min_std is not None:
                     self.actor_critic.std.data = self.actor_critic.std.data.clamp(min=self.min_std)
 
-
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
+        mean_smooth_loss /= num_updates
         mean_mirror_loss /= num_updates
         self.storage.clear()
         loss_dict = {
             "value_function": mean_value_loss,
             "surrogate": mean_surrogate_loss,
+            "mean smooth loss": mean_smooth_loss,
             "symmetry": mean_mirror_loss,
         }
         return loss_dict

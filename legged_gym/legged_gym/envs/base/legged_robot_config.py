@@ -81,7 +81,7 @@ class LeggedRobotCfg(BaseConfig):
 
     class init_state:
         pos = [0.0, 0.0, 1.] # x,y,z [m]
-        rot = [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
+        rot = [0.0, 0.0, 0.0, 1.] # x,y,z,w [quat]
         lin_vel = [0.0, 0.0, 0.0]  # x,y,z [m/s]
         ang_vel = [0.0, 0.0, 0.0]  # x,y,z [rad/s]
         default_joint_angles = {
@@ -100,7 +100,7 @@ class LeggedRobotCfg(BaseConfig):
         action_scale = [
         ]
         # decimation: Number of control action updates @ sim DT per policy DT
-        decimation = 8
+        decimation = 4
 
     class asset:
         file = '' 
@@ -127,7 +127,7 @@ class LeggedRobotCfg(BaseConfig):
         
         damping = []
 
-        frictionloss = []
+        friction = []
 
     class domain_rand:
         randomize_payload_mass = True
@@ -171,6 +171,8 @@ class LeggedRobotCfg(BaseConfig):
         damping_range = [0.6, 1.4]
         randomize_armature = True
         armature_range = [0.8, 1.2]
+        randomize_friction = True
+        friction_range = [0.6, 1.4]
         props_interval = 1000 # ticks
 
     class rewards:
@@ -237,7 +239,7 @@ class LeggedRobotCfg(BaseConfig):
         lookat = [11., 5, 3.]  # [m]
 
     class sim:
-        dt =  0.0025
+        dt =  0.005
         substeps = 1
         gravity = [0., 0. ,-9.81]  # [m/s^2]
         up_axis = 1  # 0 is y, 1 is z
