@@ -557,6 +557,7 @@ class LeggedRobot(BaseTask):
         #pd controller
         actions_scaled = actions * self.action_scale
         self.joint_pos_target = self.default_dof_pos + actions_scaled
+        self._saturate_target_dof_pos(self.joint_pos_target)
 
         control_type = self.cfg.control.control_type
         if control_type=="P":
@@ -568,7 +569,23 @@ class LeggedRobot(BaseTask):
         else:
             raise NameError(f"Unknown controller type: {control_type}")
         return torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
-    
+       
+    def _saturate_target_dof_pos(self, target_pos):
+        hard_dof_limits = self.dof_pos_limits
+        soft_dof_limits = self.dof_pos_limits.clone()
+        soft_limit_band = 0.95
+        m = (hard_dof_limits[:, :, 0] + hard_dof_limits[:, :, 1]) / 2
+        r = (hard_dof_limits[:, :, 1] - hard_dof_limits[:, :, 0])
+        soft_dof_limits[:, :, 0] = m - 0.5 * r * soft_limit_band
+        soft_dof_limits[:, :, 1] = m + 0.5 * r * soft_limit_band
+
+        upper_soft_violation = (self.dof_pos > soft_dof_limits[:, :, 1]) & (target_pos > hard_dof_limits[:, :, 1])
+        lower_soft_violation = (self.dof_pos < soft_dof_limits[:, :, 0]) & (target_pos < hard_dof_limits[:, :, 0])
+
+        target_pos[upper_soft_violation] -= ((self.dof_pos - soft_dof_limits[:, :, 1])/(hard_dof_limits[:, :, 1]-soft_dof_limits[:, :, 1])* (target_pos - hard_dof_limits[:, :, 1]))[upper_soft_violation]
+        target_pos[lower_soft_violation] += ((soft_dof_limits[:, :, 0] - self.dof_pos)/(soft_dof_limits[:, :, 0] - hard_dof_limits[:, :, 0]) * (hard_dof_limits[:, :, 0] - target_pos))[lower_soft_violation]
+        return target_pos
+
     def _reset_states(self, env_ids):
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)

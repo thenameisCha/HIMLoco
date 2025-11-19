@@ -11,6 +11,72 @@ class IGRISC(LeggedRobot):
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.debug_viz = False
+        self.waist_constraints = {
+            'r_a_init_': torch.tensor([
+            [0.0, 0.0],
+            [0.0905, -0.0905],
+            [-0.04, -0.04]
+            ], dtype=torch.float32, device=self.device),
+            'r_b_init_': torch.tensor([
+            [-0.05167, -0.05167],
+            [0.09050, -0.09050],
+            [-0.04587, -0.04587]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_init_': torch.tensor([
+            [-0.05, -0.05],
+            [0.0940, -0.0940],
+            [0.014, 0.014]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_offset_local_': torch.tensor([
+            [-0.05, -0.05],
+            [0.094, -0.094],
+            [0.014, 0.014]
+            ], dtype=torch.float32, device=self.device),
+        }
+        self.L_ankle_constraints = {
+            'r_a_init_': torch.tensor([
+            [0.0, 0.0],
+            [0.03775, -0.03775],
+            [0.26, 0.152]
+            ], dtype=torch.float32, device=self.device),
+            'r_b_init_': torch.tensor([
+            [-0.03750, -0.03750],
+            [0.03775, -0.03775],
+            [0.25989, 0.15181]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_init_': torch.tensor([
+            [-0.03400, -0.03400],
+            [0.03100, -0.03100],
+            [0.0, 0.0]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_offset_local_': torch.tensor([
+            [-0.034, -0.034],
+            [0.031, -0.031],
+            [0.0, 0.0]
+            ], dtype=torch.float32, device=self.device),
+        }
+        self.R_ankle_constraints = {
+            'r_a_init_': torch.tensor([
+            [0.0, 0.0],
+            [-0.03775, 0.03775],
+            [0.26, 0.152]
+            ], dtype=torch.float32, device=self.device),
+            'r_b_init_': torch.tensor([
+            [-0.03750, -0.03750],
+            [-0.03775, 0.03775],
+            [0.25989, 0.15181]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_init_': torch.tensor([
+            [-0.03400, -0.03400],
+            [-0.03100, 0.03100],
+            [0.0, 0.0]
+            ], dtype=torch.float32, device=self.device),
+            'r_c_offset_local_': torch.tensor([
+            [-0.034, -0.034],
+            [-0.031, 0.031],
+            [0.0, 0.0]
+            ], dtype=torch.float32, device=self.device),
+        }
     
     def _mirror_observations(self, obs):
         num_waist = self.cfg.env.num_waist
@@ -265,10 +331,10 @@ class IGRISC(LeggedRobot):
         super()._post_physics_step_callback()
         self._update_standstill_flags()
         self._update_commands()
+        self._update_fourbar_linkage()
         self._compute_centroidal_dynamics()
 
     def _init_buffers(self):
-        self.target_raibert_footholds = torch.zeros((self.num_envs, 3), device=self.device)
         self.standstill_flag = torch.zeros((self.num_envs,), device=self.device, dtype=torch.bool)
         return super()._init_buffers()
 
@@ -300,7 +366,112 @@ class IGRISC(LeggedRobot):
             self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1])
             self.commands[:, 2] *= (torch.norm(self.commands[:, 0:1], dim=1) < 0.6)
             self.commands[:, 2] *= (self.commands[:, 2].abs() > 0.2)
+ 
+    def _update_fourbar_linkage(self):
+        waist_base_idx =  self.body_names_dict['Link_Waist_Pitch']
+        waist_p2_idx = self.body_names_dict['Link_Waist_Yaw']
+        L_ankle_base_idx = self.body_names_dict['Link_Knee_Pitch_Left']
+        L_ankle_p2_idx = self.body_names_dict['Link_Ankle_Roll_Left']
+        R_ankle_base_idx = self.body_names_dict['Link_Knee_Pitch_Right']
+        R_ankle_p2_idx = self.body_names_dict['Link_Ankle_Roll_Right']
 
+        waist_motor_pgain = self.cfg.control.stiffness.get("Joint_Waist_Roll", 25.0)
+        waist_motor_dgain = self.cfg.control.damping.get("Joint_Waist_Roll", 1.2)
+        ankle_motor_pgain = self.cfg.control.stiffness.get("Joint_Ankle_Roll", 25.0)
+        ankle_motor_dgain = self.cfg.control.damping.get("Joint_Ankle_Roll", 1.7)
+        waist_motor_pgains = torch.tensor([[waist_motor_pgain, 0.0], [0.0, waist_motor_pgain]], device=self.device).unsqueeze(0).repeat(self.num_envs,1,1)
+        waist_motor_dgains = torch.tensor([[waist_motor_dgain, 0.0], [0.0, waist_motor_dgain]], device=self.device).unsqueeze(0).repeat(self.num_envs,1,1)
+        ankle_motor_pgains = torch.tensor([[ankle_motor_pgain, 0.0], [0.0, ankle_motor_pgain]], device=self.device).unsqueeze(0).repeat(self.num_envs,1,1)
+        ankle_motor_dgains = torch.tensor([[ankle_motor_dgain, 0.0], [0.0, ankle_motor_dgain]], device=self.device).unsqueeze(0).repeat(self.num_envs,1,1)
+
+        waist_dof_pos = self.dof_pos[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist][:, [1,0]]  # pitch, roll
+        L_ankle_dof_pos = self.dof_pos[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2]
+        R_ankle_dof_pos = self.dof_pos[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions]
+        waist_motor_pos = self._fourbar_ik(waist_dof_pos, self.waist_constraints, waist_base_idx, waist_p2_idx)
+        # L_ankle_motor_pos = self._fourbar_ik(L_ankle_dof_pos, self.L_ankle_constraints, L_ankle_base_idx, L_ankle_p2_idx)
+        # R_ankle_motor_pos = self._fourbar_ik(R_ankle_dof_pos, self.R_ankle_constraints, R_ankle_base_idx, R_ankle_p2_idx)
+        
+        waist_jac = self._fourbar_jacobian(waist_dof_pos, waist_motor_pos, self.waist_constraints)
+        L_ankle_jac = self._fourbar_jacobian(L_ankle_dof_pos, L_ankle_motor_pos, self.L_ankle_constraints)
+        R_ankle_jac = self._fourbar_jacobian(R_ankle_dof_pos, R_ankle_motor_pos, self.R_ankle_constraints)
+        
+        # waist_pgains, waist_dgains = self.p_gains[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist], self.d_gains[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist]
+        # L_ankle_pgains, L_ankle_dgains = self.p_gains[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2], self.d_gains[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2]
+        # R_ankle_pgains, R_ankle_dgains = self.p_gains[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions], self.d_gains[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions]
+        # waist_pgains = torch.bmm(torch.bmm(waist_jac.transpose(1,2), waist_motor_pgains), waist_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+        # waist_dgains = torch.bmm(torch.bmm(waist_jac.transpose(1,2), waist_motor_dgains), waist_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+        # L_ankle_pgains = torch.bmm(torch.bmm(L_ankle_jac.transpose(1,2), ankle_motor_pgains), L_ankle_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+        # L_ankle_dgains = torch.bmm(torch.bmm(L_ankle_jac.transpose(1,2), ankle_motor_dgains), L_ankle_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+        # R_ankle_pgains = torch.bmm(torch.bmm(R_ankle_jac.transpose(1,2), ankle_motor_pgains), R_ankle_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+        # R_ankle_dgains = torch.bmm(torch.bmm(R_ankle_jac.transpose(1,2), ankle_motor_dgains), R_ankle_jac.transpose(1,2)).diagonal(dim1=1, dim2=2)
+
+    def _fourbar_ik(self, dof_pos, constraints, base_idx, p_2_idx):
+        B = dof_pos.shape[0]
+        r_c_ = torch.zeros((B, 3, 2), device=self.device) # [B,3,2]        
+        r_b_ = torch.zeros((B, 3, 2), device=self.device) # [B,3,2]
+        r_a_init_ = constraints['r_a_init_'].unsqueeze(dim=0).repeat(B,1,1)  # [B,3,2]
+        r_b_init_ = constraints['r_b_init_'].unsqueeze(dim=0).repeat(B,1,1)  # [B,3,2]
+        r_c_init_ = constraints['r_c_init_'].unsqueeze(dim=0).repeat(B,1,1)  # [B,3,2]
+        r_c_offset_local_ = constraints['r_c_offset_local_'].unsqueeze(dim=0).repeat(B,1,1)   # [B,3,2]
+
+        l_bar_ = torch.norm(r_b_init_ - r_a_init_, dim=1) # [B,2]
+        l_rod_ = torch.norm(r_c_init_ - r_b_init_, dim=1)  # [B,2]
+        r_b_offset_local_ = r_b_init_ - r_a_init_  # [B,3,2]
+        b_vec_ = r_b_init_ - r_a_init_  # [B,3,2]
+        base_quat = self.rb_states[:, base_idx, 3:7]  # [B,4]
+        p2_quat = self.rb_states[:, p_2_idx, 3:7]  # [B,4]
+        base_pos = self.rb_states[:, base_idx, 0:3]  # [B,3]
+        xml_to_urdf_base_offset = torch.tensor([[[0.0], [0.0], [+0.04]]], device=self.device).repeat(B,1,1) # [B,3,1]
+        xml_to_urdf_p2_offset = torch.tensor([[[0.05], [0.0], [-0.026]]], device=self.device).repeat(B,1,1) # [B,3,1]
+        base_pos += quat_apply(base_quat, xml_to_urdf_base_offset).squeeze(-1)
+        p2_pos = self.rb_states[:, p_2_idx, 0:3]  # [B,3]
+        p2_pos += quat_apply(p2_quat, xml_to_urdf_p2_offset).squeeze(-1)
+
+        r_c_[:, :, 0] = quat_rotate_inverse(base_quat, p2_pos - base_pos + quat_apply(p2_quat, r_c_offset_local_[:, :, 0]))
+        r_c_[:, :, 1] = quat_rotate_inverse(base_quat, p2_pos - base_pos + quat_apply(p2_quat, r_c_offset_local_[:, :, 1]))
+        
+        a_vec_ = r_c_ - r_a_init_
+        d = -(l_rod_.square()-l_bar_.square()-a_vec_.square().sum(dim=1)) / 2 # [B,2]
+        e = d - a_vec_[:, 1, :] * b_vec_[:, 1, :] # [B,2]
+        A = (a_vec_.square()[:, 0] + a_vec_.square()[:, 2]) * (b_vec_.square()[:, 0] + b_vec_.square()[:, 2])  # [B,2]
+        B = (a_vec_[:, 0] * b_vec_[:, 2] - a_vec_[:, 2] * b_vec_[:, 0]) * e  # [B,2]
+        C = e.square() - (a_vec_.square()[:, 0] * b_vec_.square()[:, 0] + a_vec_.square()[:, 2] * b_vec_.square()[:, 2] + 2 * a_vec_[:, 0] * a_vec_[:, 2] * b_vec_[:, 0] * b_vec_[:, 2])  # [B,2]
+        value_pos_sign = torch.clamp(
+            (B + torch.sqrt(torch.clamp(B * B - A * C, min=0.0))) / A, -1.0, 1.0)
+        value_neg_sign = torch.clamp(
+            (B - torch.sqrt(torch.clamp(B * B - A * C, min=0.0))) / A, -1.0, 1.0)
+        motor_angle_pos = torch.asin(value_pos_sign)  # [B,2]
+        motor_angle_neg = torch.asin(value_neg_sign)  # [B,2]   
+        num_candidates = torch.zeros((B,2), device=self.device, dtype=torch.int32)
+        motor_angle_candidates = torch.zeros((B,6,2), device=self.device)  # [B,6,2]
+        for i in range(2):  # for each leg
+            if (motor_angle_pos[:, i] >= constraints['motor_angles_min_'][i] and
+                motor_angle_pos[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = motor_angle_pos[:, i]
+                num_candidates[:, i] += 1
+            if (motor_angle_neg[:, i] >= constraints['motor_angles_min_'][i] and
+                motor_angle_neg[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = motor_angle_neg[:, i]
+                num_candidates[:, i] += 1
+            if (torch.pi - motor_angle_pos[:, i] >= constraints['motor_angles_min_'][i] and
+                torch.pi - motor_angle_pos[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = torch.pi - motor_angle_pos[:, i]
+                num_candidates[:, i] += 1
+            if (torch.pi - motor_angle_neg[:, i] >= constraints['motor_angles_min_'][i] and
+                torch.pi - motor_angle_neg[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = torch.pi - motor_angle_neg[:, i]
+                num_candidates[:, i] += 1
+            if (-torch.pi - motor_angle_pos[:, i] >= constraints['motor_angles_min_'][i] and
+                -torch.pi - motor_angle_pos[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = -torch.pi - motor_angle_pos[:, i]
+                num_candidates[:, i] += 1
+            if (-torch.pi - motor_angle_neg[:, i] >= constraints['motor_angles_min_'][i] and
+                -torch.pi - motor_angle_neg[:, i] <= constraints['motor_angles_max_'][i]):
+                motor_angle_candidates[:, num_candidates[:, i], i] = -torch.pi - motor_angle_neg[:, i]
+                num_candidates[:, i] += 1
+        
+    def _fourbar_jacobian(self, dof_pos, motor_pos, constraints):
+        pass
     #------------ reward functions----------------
 
     def _reward_dof_pos_limits(self):
