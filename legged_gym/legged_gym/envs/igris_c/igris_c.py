@@ -254,7 +254,8 @@ class IGRISC(LeggedRobot):
         R_pitch = self.action_offset + self.cfg.env.num_waist + self.cfg.env.num_lower_actions - 2
 
         # Piecewise thresholds (must satisfy p1 < p2)
-        p1, p2 = -0.37, 0.23
+        p1, p2 = -0.37, 0.2
+        r_at_pmax, r_at_pmin = 0.05, 0.05
         if not (p1 < p2):
             raise ValueError("Require p1 < p2")
 
@@ -263,60 +264,6 @@ class IGRISC(LeggedRobot):
         self.dof_pos_limits[:, L_pitch, 1] = limits[L_pitch][1]
         self.dof_pos_limits[:, R_pitch, 0] = limits[R_pitch][0]
         self.dof_pos_limits[:, R_pitch, 1] = limits[R_pitch][1]
-
-        def compute_side(roll_id, pitch_id):
-            rmin, rmax = limits[roll_id]
-            pmin, pmax = limits[pitch_id]
-
-            pitch_raw = self.dof_pos[:, pitch_id]
-            # Out-of-range mask on raw pitch (your choice: zero out in this case)
-            oob = (pitch_raw < pmin) | (pitch_raw > pmax)
-
-            # Clamp used for ramps to avoid extrapolation
-            pitch = torch.clamp(pitch_raw, min=pmin, max=pmax)
-
-            # Masks (cover boundaries)
-            z1 = pitch <= p1
-            z2 = (pitch > p1) & (pitch < p2)
-            z3 = pitch >= p2
-
-            # Safe denominators
-            eps = 1e-8
-            d1 = max(p1 - pmin, eps)   # pmin -> p1
-            d3 = max(pmax - p2, eps)   # p2   -> pmax
-
-            # Scales in [0,1]
-            s1 = (pitch - pmin) / d1         # 0 at pmin -> 1 at p1
-            s3 = (pmax - pitch) / d3         # 1 at p2   -> 0 at pmax
-
-            # Zone values
-            # zone1: ramp 0 -> [rmin,rmax]
-            lo_z1 = s1 * rmin
-            hi_z1 = s1 * rmax
-            # zone2: flat at independent limits
-            lo_z2 = pitch.new_full((B,), rmin)
-            hi_z2 = pitch.new_full((B,), rmax)
-            # zone3: ramp [rmin,rmax] -> 0
-            lo_z3 = s3 * rmin
-            hi_z3 = s3 * rmax
-
-            lo = torch.where(z1, lo_z1, torch.where(z2, lo_z2, lo_z3))
-            hi = torch.where(z1, hi_z1, torch.where(z2, hi_z2, hi_z3))
-
-            # Clamp to independent bounds (keeps numerical noise in range)
-            lo = torch.clamp(lo, min=rmin, max=rmax)
-            hi = torch.clamp(hi, min=rmin, max=rmax)
-
-            # Apply OOB policy: collapse to 0 if pitch is outside its valid range
-            zero = pitch.new_zeros((B,))
-            lo = torch.where(oob, zero, lo)
-            hi = torch.where(oob, zero, hi)
-            m = (hi + lo) / 2
-            r = (hi - lo)
-
-            # Write back
-            self.dof_pos_limits[:, roll_id, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
-            self.dof_pos_limits[:, roll_id, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
 
         compute_side(L_roll, L_pitch)
         compute_side(R_roll, R_pitch)

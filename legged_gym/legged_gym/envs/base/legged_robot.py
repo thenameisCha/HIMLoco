@@ -558,7 +558,6 @@ class LeggedRobot(BaseTask):
         actions_scaled = actions * self.action_scale
         self.joint_pos_target = self.default_dof_pos + actions_scaled
         self._saturate_target_dof_pos(self.joint_pos_target)
-
         control_type = self.cfg.control.control_type
         if control_type=="P":
             torques = self.p_gains * self.Kp_factors * (self.joint_pos_target - self.dof_pos) - self.d_gains * self.Kd_factors * self.dof_vel
