@@ -19,14 +19,14 @@ class IGRISCCfg( LeggedRobotCfg ):
             "Joint_Hip_Roll_Left": 0.0,
             "Joint_Hip_Yaw_Left": 0.,
             "Joint_Knee_Pitch_Left": 0.3,
-            "Joint_Ankle_Pitch_Left": -0.15,
+            "Joint_Ankle_Pitch_Left": -0.13,
             "Joint_Ankle_Roll_Left": 0.0,
             # Right leg (6)
             "Joint_Hip_Pitch_Right": -0.2,
             "Joint_Hip_Roll_Right": 0.0,
             "Joint_Hip_Yaw_Right": 0.0,
             "Joint_Knee_Pitch_Right": 0.3,
-            "Joint_Ankle_Pitch_Right": -0.15,
+            "Joint_Ankle_Pitch_Right": -0.13,
             "Joint_Ankle_Roll_Right": 0.0,
             # Waist + Neck (5)
             # "Joint_Waist_Yaw": 0.0,
@@ -56,23 +56,23 @@ class IGRISCCfg( LeggedRobotCfg ):
     class control(LeggedRobotCfg.control):
         stiffness = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": 150,
-            "Joint_Hip_Roll_Left": 150,
-            "Joint_Hip_Yaw_Left": 100.0,
-            "Joint_Knee_Pitch_Left": 150,
-            "Joint_Ankle_Pitch_Left": 80.181,
-            "Joint_Ankle_Roll_Left": 65.6563,
+            "Joint_Hip_Pitch_Left": 100,
+            "Joint_Hip_Roll_Left": 100,
+            "Joint_Hip_Yaw_Left": 50.0,
+            "Joint_Knee_Pitch_Left": 100,
+            "Joint_Ankle_Pitch_Left": 25,
+            "Joint_Ankle_Roll_Left": 25,
             # Right leg (6)
             "Joint_Hip_Pitch_Right": 100,
             "Joint_Hip_Roll_Right": 100,
             "Joint_Hip_Yaw_Right": 50.0,
             "Joint_Knee_Pitch_Right": 100,
-            "Joint_Ankle_Pitch_Right": 80.181,
-            "Joint_Ankle_Roll_Right": 65.6563,
+            "Joint_Ankle_Pitch_Right": 25,
+            "Joint_Ankle_Roll_Right": 25,
             # Waist + Neck (5)
             # "Joint_Waist_Yaw": 100.0,
-            "Joint_Waist_Roll": 458.206,
-            "Joint_Waist_Pitch": 137.664,
+            "Joint_Waist_Roll": 25.0,
+            "Joint_Waist_Pitch": 25.0,
             # "Joint_Neck_Yaw": 30.0,
             # "Joint_Neck_Pitch": 30.0,
             # # Left arm (7)
@@ -94,23 +94,23 @@ class IGRISCCfg( LeggedRobotCfg ):
         }
         damping = {
             # Left leg (6)
-            "Joint_Hip_Pitch_Left": 2.,
-            "Joint_Hip_Roll_Left": 3.,
-            "Joint_Hip_Yaw_Left": 1.5,
-            "Joint_Knee_Pitch_Left": 1.,
-            "Joint_Ankle_Pitch_Left": 3.5284,
-            "Joint_Ankle_Roll_Left": 2.93288,
+            "Joint_Hip_Pitch_Left": 1.5,
+            "Joint_Hip_Roll_Left": 2.5,
+            "Joint_Hip_Yaw_Left": 1.2,
+            "Joint_Knee_Pitch_Left": 0.75,
+            "Joint_Ankle_Pitch_Left": 1.7,
+            "Joint_Ankle_Roll_Left": 1.7,
             # Right leg (6)
-            "Joint_Hip_Pitch_Right": 2.,
-            "Joint_Hip_Roll_Right": 3.,
-            "Joint_Hip_Yaw_Right": 1.5,
-            "Joint_Knee_Pitch_Right": 1.,
-            "Joint_Ankle_Pitch_Right": 3.5284,
-            "Joint_Ankle_Roll_Right": 2.93288,
+            "Joint_Hip_Pitch_Right": 1.5,
+            "Joint_Hip_Roll_Right": 2.5,
+            "Joint_Hip_Yaw_Right": 1.2,
+            "Joint_Knee_Pitch_Right": 0.75,
+            "Joint_Ankle_Pitch_Right": 1.7,
+            "Joint_Ankle_Roll_Right": 1.7,
             # # Waist + Neck (5)
             # "Joint_Waist_Yaw": 2.0,
-            "Joint_Waist_Roll": 11.7824,
-            "Joint_Waist_Pitch": 3.53993,
+            "Joint_Waist_Roll": 1.2,
+            "Joint_Waist_Pitch": 1.2,
             # "Joint_Neck_Yaw": 1.0,
             # "Joint_Neck_Pitch": 1.0,
             # # Left arm (7)
@@ -199,7 +199,7 @@ class IGRISCCfg( LeggedRobotCfg ):
 
     class rewards( LeggedRobotCfg.rewards ):
         base_height_target = 0.95
-        soft_dof_pos_limit = .95 # percentage of urdf limits, values above this limit are penalized
+        soft_dof_pos_limit = 1. # percentage of urdf limits, values above this limit are penalized
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
         clearance_height_target = -0.8
         class scales:

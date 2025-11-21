@@ -110,12 +110,14 @@ class LeggedRobot(BaseTask):
         # step physics and render each frame
         self.render()
         for _ in range(self.cfg.control.decimation):
+            self._update_fourbar_linkage()
             self.torques = self._compute_torques(self.delayed_actions[:, _]).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             self.gym.simulate(self.sim)
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
+            self._compute_joint_limits()
         termination_ids, extras = self.post_physics_step()
 
         # return clipped obs, clipped states (None), rewards, dones and infos
@@ -509,7 +511,6 @@ class LeggedRobot(BaseTask):
             self._push_robots()
         if self.cfg.domain_rand.disturbance and (self.common_step_counter % self.cfg.domain_rand.disturbance_interval == 0):
             self._disturbance_robots()
-        self._compute_joint_limits()
 
 
     def _post_physics_step_callback2(self):
@@ -567,23 +568,28 @@ class LeggedRobot(BaseTask):
             torques = actions_scaled
         else:
             raise NameError(f"Unknown controller type: {control_type}")
+        self._process_torques(torques)
         return torch.clip(torques*self.motor_strength_factors, -self.torque_limits, self.torque_limits)
        
+    def _process_torques(self, torques):
+        '''
+        Post process computed torques, before clipping and applying it to the simulation.
+        '''
+        pass
+
     def _saturate_target_dof_pos(self, target_pos):
-        hard_dof_limits = self.dof_pos_limits
-        soft_dof_limits = self.dof_pos_limits.clone()
-        soft_limit_band = 0.95
-        m = (hard_dof_limits[:, :, 0] + hard_dof_limits[:, :, 1]) / 2
-        r = (hard_dof_limits[:, :, 1] - hard_dof_limits[:, :, 0])
-        soft_dof_limits[:, :, 0] = m - 0.5 * r * soft_limit_band
-        soft_dof_limits[:, :, 1] = m + 0.5 * r * soft_limit_band
+        '''
+        Implements equation (9) from https://arxiv.org/pdf/2509.06342
+        target_pos is the target joint position computed from the policy actions.
+        '''
+        pass
 
-        upper_soft_violation = (self.dof_pos > soft_dof_limits[:, :, 1]) & (target_pos > hard_dof_limits[:, :, 1])
-        lower_soft_violation = (self.dof_pos < soft_dof_limits[:, :, 0]) & (target_pos < hard_dof_limits[:, :, 0])
-
-        target_pos[upper_soft_violation] -= ((self.dof_pos - soft_dof_limits[:, :, 1])/(hard_dof_limits[:, :, 1]-soft_dof_limits[:, :, 1])* (target_pos - hard_dof_limits[:, :, 1]))[upper_soft_violation]
-        target_pos[lower_soft_violation] += ((soft_dof_limits[:, :, 0] - self.dof_pos)/(soft_dof_limits[:, :, 0] - hard_dof_limits[:, :, 0]) * (hard_dof_limits[:, :, 0] - target_pos))[lower_soft_violation]
-        return target_pos
+    def _update_fourbar_linkage(self):
+        '''
+        Updates vitual fourbar linkage.
+        Refreshes motor pos, fourbar jacobians, etc.
+        '''
+        pass
 
     def _reset_states(self, env_ids):
         self._reset_dofs(env_ids)
@@ -768,6 +774,8 @@ class LeggedRobot(BaseTask):
         self.jacobian = gymtorch.wrap_tensor(jacobian)
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
+        self.motor_pos = self.dof_pos.clone()
+        self.motor_vel = self.dof_vel.clone()        
         self.base_quat = self.root_states[:, 3:7]
         self.feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         self.feet_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:10]
