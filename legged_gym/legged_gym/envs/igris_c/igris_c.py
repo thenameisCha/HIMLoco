@@ -34,8 +34,8 @@ class IGRISC(LeggedRobot):
             'base_to_p1_axis': torch.tensor([0.0, -1.0, 0.0], dtype=torch.float32, device=self.device),
             'p1_to_p2_offset': torch.tensor([0.0, 0.0, 0.04], dtype=torch.float32, device=self.device),
             'p1_to_p2_axis': torch.tensor([-1.0, 0.0, 0.0], dtype=torch.float32, device=self.device),
-            'motor_angles_min_': torch.tensor([-1.57, -1.57], dtype=torch.float32, device=self.device),
-            'motor_angles_max_': torch.tensor([0.5, 0.5], dtype=torch.float32, device=self.device),
+            'motor_angles_min_': torch.tensor([-0.05, -0.05], dtype=torch.float32, device=self.device),
+            'motor_angles_max_': torch.tensor([0.68, 0.68], dtype=torch.float32, device=self.device),
             'is_elbow_up_': True
         }
         self.L_ankle_constraints = {
@@ -536,7 +536,7 @@ class IGRISC(LeggedRobot):
             L_ankle_motor_torque = motor_torques[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2]
             R_ankle_motor_torque = motor_torques[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions]
 
-            torques[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist] = torch.bmm(self.waist_jac.transpose(1,2), waist_motor_torque.unsqueeze(-1)).squeeze(-1)
+            torques[:, self.cfg.env.num_waist-2:self.cfg.env.num_waist] = torch.bmm(self.waist_jac.transpose(1,2), waist_motor_torque.unsqueeze(-1)).squeeze(-1)[:, [1,0]]
             torques[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions//2] = torch.bmm(self.L_ankle_jac.transpose(1,2), L_ankle_motor_torque.unsqueeze(-1)).squeeze(-1)
             torques[:, self.cfg.env.num_waist+self.cfg.env.num_lower_actions-2:self.cfg.env.num_waist+self.cfg.env.num_lower_actions] = torch.bmm(self.R_ankle_jac.transpose(1,2), R_ankle_motor_torque.unsqueeze(-1)).squeeze(-1)
 
